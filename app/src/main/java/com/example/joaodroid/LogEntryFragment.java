@@ -1,0 +1,306 @@
+package com.example.joaodroid;
+
+import android.content.Context;
+import android.os.Bundle;
+
+import androidx.fragment.app.Fragment;
+import androidx.recyclerview.widget.DividerItemDecoration;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
+
+import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.example.joaodroid.dummy.DummyContent.DummyItem;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+/**
+ * A fragment representing a list of Items.
+ * <p/>
+ * Activities containing this fragment MUST implement the {@link OnListFragmentInteractionListener}
+ * interface.
+ */
+public class LogEntryFragment extends Fragment {
+
+    // TODO: Customize parameter argument names
+    private static final String ARG_COLUMN_COUNT = "column-count";
+    // TODO: Customize parameters
+    private int mColumnCount = 1;
+    private OnListFragmentInteractionListener mListener;
+
+    public MyLogEntryRecyclerViewAdapter mAdapter;
+    private List<DummyItem> items;
+    private String query;
+
+    /**
+     * Mandatory empty constructor for the fragment manager to instantiate the
+     * fragment (e.g. upon screen orientation changes).
+     */
+    public LogEntryFragment() {
+    }
+
+    // TODO: Customize parameter initialization
+    @SuppressWarnings("unused")
+    public static LogEntryFragment newInstance(int columnCount) {
+        LogEntryFragment fragment = new LogEntryFragment();
+        Bundle args = new Bundle();
+        args.putInt(ARG_COLUMN_COUNT, columnCount);
+        fragment.setArguments(args);
+        return fragment;
+    }
+
+    public void parseLogFile(File file, List<DummyItem> items) {
+        String filename = file.getName();
+        String date = filename.substring(4, 14);
+        DummyItem current_item = null;
+
+        try {
+            InputStream is = new FileInputStream(file);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+
+            Pattern p = Pattern.compile("^(\\d{8}) (\\[\\d{2}:\\d{2}:\\d{2}\\])");
+            Pattern p2 = Pattern.compile("^\\([^)]+\\)");
+
+            String line = reader.readLine();
+            while (line != null) {
+                Matcher m = p.matcher(line);
+                if (m.find()) {
+                    if (current_item != null) {
+                        items.add(current_item);
+                    }
+
+                    String id = m.group(1);
+                    String timestamp = m.group(2);
+                    timestamp = timestamp.substring(1, timestamp.length()-1);
+                    String title = line.substring(m.group(0).length());
+                    title = title.replaceAll("^[ \t]+|[ \t]+$", "");
+
+                    ArrayList<String> tags = new ArrayList<>();
+                    Matcher m2 = p2.matcher(title);
+                    if (m2.find()) {
+                        title = title.substring(m2.group(0).length());
+                        String tmp = m2.group(0).toUpperCase();
+                        String[] arr = tmp.substring(1, tmp.length()-1).split(",");
+                        for (String t : arr) {
+                            tags.add(t);
+                        }
+                    }
+
+                    title = title.replaceAll("^[ \t]+|[ \t]+$", "");
+                    current_item = new DummyItem(id, title, "");
+                    current_item.tags = tags;
+
+                    String datetime = date + " " + timestamp;
+                    String date_pattern = "yyyy-MM-dd HH:mm:ss";
+                    current_item.timestamp = new SimpleDateFormat(date_pattern).parse(datetime);
+                } else if (current_item != null) {
+                    current_item.content += line + "\n";
+                }
+                line = reader.readLine();
+            }
+
+            if (current_item != null) {
+                items.add(current_item);
+            }
+        } catch (FileNotFoundException e) {
+
+        } catch (IOException e) {
+
+        } catch (ParseException e) {
+
+        }
+    }
+
+    private HashMap<String, Integer> loadVocab() {
+        HashMap<String, Integer> result = new HashMap<>();
+        Context context = getContext();
+        File file = new File(context.getFilesDir(), "files/vocab.txt");
+
+        try {
+            InputStream is = new FileInputStream(file);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            String line = reader.readLine();
+            while (line != null) {
+                String[] arr = line.split(" ");
+                result.put(arr[0], Integer.parseInt(arr[1]));
+                line = reader.readLine();
+            }
+        } catch (FileNotFoundException e) {
+        } catch (IOException e) {
+        }
+        return result;
+    }
+
+    private ArrayList<String> tokenize(String s) {
+        String[] arr = s.toLowerCase().split("[ \n\t]+|[:=(),.'?]");
+        return new ArrayList<>(Arrays.asList(arr));
+    }
+
+    private void updateList() {
+        items = new ArrayList<>();
+        ArrayList<DummyItem> items2 = new ArrayList<>();
+        Context context = getContext();
+        File directory = new File(context.getFilesDir(), "files");
+        File[] files = directory.listFiles();
+        for (int i = 0; i < files.length; i++) {
+            String filename = files[i].getName();
+            if (filename.startsWith("log.")) {
+                parseLogFile(files[i], items2);
+            }
+        }
+
+        // Search.
+        if (query != null && !query.equals("")) {
+            ArrayList<String> query_tkns = tokenize(query);
+            // HashMap<String, Integer> dict = loadVocab();
+            HashMap<String, Integer> dict = new HashMap<>();
+            for (int i = 0; i < items2.size(); i++) {
+                ArrayList<String> tkns = new ArrayList<>();
+                tkns.addAll(tokenize(items2.get(i).title));
+                tkns.addAll(tokenize(items2.get(i).content));
+                for (String t : tkns) {
+                    if (dict.containsKey(t)) {
+                        dict.put(t, dict.get(t) + 1);
+                    } else {
+                        dict.put(t, 1);
+                    }
+                }
+            }
+
+            for (int i = 0; i < items2.size(); i++) {
+                ArrayList<String> tkns = new ArrayList<>();
+                tkns.addAll(tokenize(items2.get(i).title));
+                tkns.addAll(tokenize(items2.get(i).content));
+
+                double score = 0.0;
+                double norm = 0.0;
+                for (String t : tkns) {
+                    if (dict.containsKey(t)) {
+                        if (query_tkns.contains(t)) {
+                            score += Math.pow(1.0 / (double) dict.get(t), 2);
+                        }
+                        norm += Math.pow(1.0 / (double) dict.get(t), 2);
+                    }
+                }
+                if (norm > 0) {
+                    score /= Math.sqrt(norm);
+                }
+                items2.get(i).score = score;
+            }
+
+            for (int i = 0; i < items2.size(); i++) {
+                if (items2.get(i).score == 0) continue;
+                else items.add(items2.get(i));
+            }
+
+            Collections.sort(items, new Comparator<DummyItem>() {
+                public int compare(DummyItem o1, DummyItem o2) {
+                    if (o2.score == o1.score) return 0;
+                    if (o2.score > o1.score) return 1;
+                    return -1;
+                }
+            });
+        } else {
+            items = items2;
+            Collections.sort(items, new Comparator<DummyItem>() {
+                public int compare(DummyItem o1, DummyItem o2) {
+                    return o2.timestamp.compareTo(o1.timestamp);
+                }
+            });
+        }
+    }
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        updateList();
+
+        ((LogActivity) getActivity()).setFragmentRefreshListener(new LogActivity.FragmentRefreshListener() {
+            @Override
+            public void onRefresh(String q) {
+                query = q;
+                updateList();
+                mAdapter.setItems(items);
+                mAdapter.notifyDataSetChanged();
+            }
+        });
+    }
+
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+                             Bundle savedInstanceState) {
+        View view = inflater.inflate(R.layout.fragment_logentry_list, container, false);
+
+        // Set the adapter
+        if (view instanceof RecyclerView) {
+            Context context = view.getContext();
+            RecyclerView recyclerView = (RecyclerView) view;
+            recyclerView.addItemDecoration(new DividerItemDecoration(recyclerView.getContext(), DividerItemDecoration.VERTICAL));
+            if (mColumnCount <= 1) {
+                recyclerView.setLayoutManager(new LinearLayoutManager(context));
+            } else {
+                recyclerView.setLayoutManager(new GridLayoutManager(context, mColumnCount));
+            }
+
+            mAdapter = new MyLogEntryRecyclerViewAdapter(items, mListener);
+            recyclerView.setAdapter(mAdapter);
+        }
+
+        return view;
+    }
+
+
+    @Override
+    public void onAttach(Context context) {
+        super.onAttach(context);
+        if (context instanceof OnListFragmentInteractionListener) {
+            mListener = (OnListFragmentInteractionListener) context;
+        } else {
+            throw new RuntimeException(context.toString()
+                    + " must implement OnListFragmentInteractionListener");
+        }
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        mListener = null;
+    }
+
+    /**
+     * This interface must be implemented by activities that contain this
+     * fragment to allow an interaction in this fragment to be communicated
+     * to the activity and potentially other fragments contained in that
+     * activity.
+     * <p/>
+     * See the Android Training lesson <a href=
+     * "http://developer.android.com/training/basics/fragments/communicating.html"
+     * >Communicating with Other Fragments</a> for more information.
+     */
+    public interface OnListFragmentInteractionListener {
+        // TODO: Update argument type and name
+        void onListFragmentInteraction(DummyItem item);
+    }
+}

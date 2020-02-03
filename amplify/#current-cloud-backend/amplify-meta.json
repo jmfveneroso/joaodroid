@@ -1,0 +1,80 @@
+{
+	"providers": {
+		"awscloudformation": {
+			"AuthRoleName": "amplify-joaodroid-amplify-121442-authRole",
+			"UnauthRoleArn": "arn:aws:iam::901663937946:role/amplify-joaodroid-amplify-121442-unauthRole",
+			"AuthRoleArn": "arn:aws:iam::901663937946:role/amplify-joaodroid-amplify-121442-authRole",
+			"Region": "us-east-2",
+			"DeploymentBucketName": "amplify-joaodroid-amplify-121442-deployment",
+			"UnauthRoleName": "amplify-joaodroid-amplify-121442-unauthRole",
+			"StackName": "amplify-joaodroid-amplify-121442",
+			"StackId": "arn:aws:cloudformation:us-east-2:901663937946:stack/amplify-joaodroid-amplify-121442/6cb409c0-3f85-11ea-83a4-02c25da8714e",
+			"AmplifyAppId": "d3m2zm8j4l4p6f"
+		}
+	},
+	"api": {
+		"amplifyDatasource": {
+			"service": "AppSync",
+			"providerPlugin": "awscloudformation",
+			"output": {
+				"authConfig": {
+					"additionalAuthenticationProviders": [],
+					"defaultAuthentication": {
+						"authenticationType": "API_KEY",
+						"apiKeyConfig": {
+							"description": "",
+							"apiKeyExpirationDays": 7
+						}
+					}
+				},
+				"GraphQLAPIIdOutput": "nvmnjd42lngklaswyvroq746ym",
+				"GraphQLAPIEndpointOutput": "https://jarr2b3t7ndytmvwb42gg2ufde.appsync-api.us-east-2.amazonaws.com/graphql",
+				"GraphQLAPIKeyOutput": "da2-tlxiji2nbnff5m2udrlt7hw2ci"
+			},
+			"providerMetadata": {
+				"s3TemplateURL": "https://s3.amazonaws.com/amplify-joaodroid-amplify-121442-deployment/amplify-cfn-templates/api/cloudformation-template.json",
+				"logicalId": "apiamplifyDatasource"
+			},
+			"lastPushTimeStamp": "2020-01-25T15:37:24.471Z",
+			"lastPushDirHash": "pMdfrFwbgunJXYlbVcx0u8tcw14="
+		}
+	},
+	"auth": {
+		"joaodroidbcb41ae0": {
+			"service": "Cognito",
+			"providerPlugin": "awscloudformation",
+			"dependsOn": [],
+			"providerMetadata": {
+				"s3TemplateURL": "https://s3.amazonaws.com/amplify-joaodroid-amplify-121442-deployment/amplify-cfn-templates/auth/joaodroidbcb41ae0-cloudformation-template.yml",
+				"logicalId": "authjoaodroidbcb41ae0"
+			},
+			"lastPushTimeStamp": "2020-01-25T15:37:24.481Z",
+			"output": {
+				"AppClientSecret": "16al6eieo8p3eqg2ridkgvu6lu5l1ffjvpm19bn19r96idtv12k4",
+				"UserPoolId": "us-east-2_ehWwcGq5r",
+				"AppClientIDWeb": "7viuhj7ci3436as9d8qn5h5gjt",
+				"AppClientID": "5tlgol6scebgmasiab6buobmrr",
+				"IdentityPoolId": "us-east-2:ad0db279-aaa7-4b60-87ad-54f194dfc168",
+				"IdentityPoolName": "joaodroidbcb41ae0_identitypool_bcb41ae0__amplify",
+				"UserPoolName": "joaodroidbcb41ae0_userpool_bcb41ae0"
+			},
+			"lastPushDirHash": "SmWlHednwdRnm+d/jBh7zm4rvJA="
+		}
+	},
+	"storage": {
+		"joaodata": {
+			"service": "S3",
+			"providerPlugin": "awscloudformation",
+			"providerMetadata": {
+				"s3TemplateURL": "https://s3.amazonaws.com/amplify-joaodroid-amplify-121442-deployment/amplify-cfn-templates/storage/s3-cloudformation-template.json",
+				"logicalId": "storagejoaodata"
+			},
+			"lastPushTimeStamp": "2020-01-25T15:37:24.481Z",
+			"output": {
+				"BucketName": "joaodata121442-amplify",
+				"Region": "us-east-2"
+			},
+			"lastPushDirHash": "xjxvUPucEz2CCp3mi3XOV+gws1g="
+		}
+	}
+}

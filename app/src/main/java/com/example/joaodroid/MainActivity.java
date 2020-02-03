@@ -4,22 +4,61 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
-import android.widget.EditText;
+
+import com.amazonaws.mobile.client.AWSMobileClient;
+import com.amazonaws.mobile.client.Callback;
+import com.amazonaws.mobile.client.UserStateDetails;
+import com.amplifyframework.core.Amplify;
+import com.amplifyframework.storage.s3.AWSS3StoragePlugin;
 
 public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_MESSAGE = "com.example.joaodroid.MESSAGE";
+    static final String STATE_INITIALIZED = "BOOL_initialized";
+    public boolean initialized = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        if (savedInstanceState == null) {
+            initialized = true;
+            AWSMobileClient.getInstance().initialize(getApplicationContext(), new Callback<UserStateDetails>() {
+                @Override
+                public void onResult(UserStateDetails userStateDetails) {
+                    try {
+                        Amplify.addPlugin(new AWSS3StoragePlugin());
+                        Amplify.configure(getApplicationContext());
+                        Log.i("AWS S3", "All set and ready to go!");
+                    } catch (Exception e) {
+                        Log.e("AWS S3", e.getMessage());
+                    }
+                }
+
+                @Override
+                public void onError(Exception e) {
+                    Log.e("AWS S3", "Initialization error.", e);
+                }
+            });
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle savedInstanceState) {
+        savedInstanceState.putBoolean(STATE_INITIALIZED, initialized);
+        super.onSaveInstanceState(savedInstanceState);
+    }
+
+    public void openSyncActivity(View view) {
+        Intent intent = new Intent(this, SyncActivity.class);
+        startActivity(intent);
     }
 
     public void sendMessage(View view) {
-        Intent intent = new Intent(this, DisplayMessageActivity.class);
-        EditText editText = (EditText) findViewById(R.id.editText);
-        String message = editText.getText().toString();
+        String message = "test";
+        Intent intent = new Intent(this, LogActivity.class);
         intent.putExtra(EXTRA_MESSAGE, message);
         startActivity(intent);
     }

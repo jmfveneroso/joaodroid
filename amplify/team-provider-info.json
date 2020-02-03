@@ -1,0 +1,20 @@
+{
+    "amplify": {
+        "awscloudformation": {
+            "AuthRoleName": "amplify-joaodroid-amplify-121442-authRole",
+            "UnauthRoleArn": "arn:aws:iam::901663937946:role/amplify-joaodroid-amplify-121442-unauthRole",
+            "AuthRoleArn": "arn:aws:iam::901663937946:role/amplify-joaodroid-amplify-121442-authRole",
+            "Region": "us-east-2",
+            "DeploymentBucketName": "amplify-joaodroid-amplify-121442-deployment",
+            "UnauthRoleName": "amplify-joaodroid-amplify-121442-unauthRole",
+            "StackName": "amplify-joaodroid-amplify-121442",
+            "StackId": "arn:aws:cloudformation:us-east-2:901663937946:stack/amplify-joaodroid-amplify-121442/6cb409c0-3f85-11ea-83a4-02c25da8714e",
+            "AmplifyAppId": "d3m2zm8j4l4p6f"
+        },
+        "categories": {
+            "auth": {
+                "joaodroidbcb41ae0": {}
+            }
+        }
+    }
+}

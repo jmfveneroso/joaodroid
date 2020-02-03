@@ -1,5 +1,13 @@
 <resources>
     <string name="app_name">JoaoDroid</string>
     <string name="edit_message">Enter a message</string>
-    <string name="button_send">Send</string>
+    <string name="button_send">Sync</string>
+    <string name="button_logs">Logs</string>
+
+    <string name="title_activity_log">LogActivity</string>
+    <string name="dummy_button">Dummy Button</string>
+    <string name="dummy_content">DUMMY\nCONTENT</string>
+
+    <string name="title_activity_single_log_entry">SingleLogEntryActivity</string>
+
 </resources>
