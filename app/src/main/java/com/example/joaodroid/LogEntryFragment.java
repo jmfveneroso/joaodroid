@@ -3,9 +3,11 @@ package com.example.joaodroid;
 import android.content.Context;
 import android.os.Bundle;
 
+import androidx.annotation.NonNull;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.DividerItemDecoration;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.ItemTouchHelper;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
@@ -14,7 +16,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.example.joaodroid.dummy.DummyContent.DummyItem;
+import com.example.joaodroid.LogReader.LogEntry;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -23,17 +25,12 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.text.ParseException;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
-import java.util.ListIterator;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A fragment representing a list of Items.
@@ -43,14 +40,34 @@ import java.util.regex.Pattern;
  */
 public class LogEntryFragment extends Fragment {
 
+    public class SwipeToDeleteCallback extends ItemTouchHelper.SimpleCallback {
+        private LogEntryRecyclerViewAdapter mAdapter;
+
+        public SwipeToDeleteCallback(LogEntryRecyclerViewAdapter adapter) {
+            super(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT);
+            mAdapter = adapter;
+        }
+
+        @Override
+        public boolean onMove(@NonNull RecyclerView recyclerView, @NonNull RecyclerView.ViewHolder viewHolder, @NonNull RecyclerView.ViewHolder target) {
+            return false;
+        }
+
+        @Override
+        public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
+            int position = viewHolder.getAdapterPosition();
+            mAdapter.deleteItem(position);
+        }
+    }
+
     // TODO: Customize parameter argument names
     private static final String ARG_COLUMN_COUNT = "column-count";
     // TODO: Customize parameters
     private int mColumnCount = 1;
     private OnListFragmentInteractionListener mListener;
 
-    public MyLogEntryRecyclerViewAdapter mAdapter;
-    private List<DummyItem> items;
+    public LogEntryRecyclerViewAdapter mAdapter;
+    private List<LogEntry> items;
     private String query;
 
     /**
@@ -68,68 +85,6 @@ public class LogEntryFragment extends Fragment {
         args.putInt(ARG_COLUMN_COUNT, columnCount);
         fragment.setArguments(args);
         return fragment;
-    }
-
-    public void parseLogFile(File file, List<DummyItem> items) {
-        String filename = file.getName();
-        String date = filename.substring(4, 14);
-        DummyItem current_item = null;
-
-        try {
-            InputStream is = new FileInputStream(file);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-
-            Pattern p = Pattern.compile("^(\\d{8}) (\\[\\d{2}:\\d{2}:\\d{2}\\])");
-            Pattern p2 = Pattern.compile("^\\([^)]+\\)");
-
-            String line = reader.readLine();
-            while (line != null) {
-                Matcher m = p.matcher(line);
-                if (m.find()) {
-                    if (current_item != null) {
-                        items.add(current_item);
-                    }
-
-                    String id = m.group(1);
-                    String timestamp = m.group(2);
-                    timestamp = timestamp.substring(1, timestamp.length()-1);
-                    String title = line.substring(m.group(0).length());
-                    title = title.replaceAll("^[ \t]+|[ \t]+$", "");
-
-                    ArrayList<String> tags = new ArrayList<>();
-                    Matcher m2 = p2.matcher(title);
-                    if (m2.find()) {
-                        title = title.substring(m2.group(0).length());
-                        String tmp = m2.group(0).toUpperCase();
-                        String[] arr = tmp.substring(1, tmp.length()-1).split(",");
-                        for (String t : arr) {
-                            tags.add(t);
-                        }
-                    }
-
-                    title = title.replaceAll("^[ \t]+|[ \t]+$", "");
-                    current_item = new DummyItem(id, title, "");
-                    current_item.tags = tags;
-
-                    String datetime = date + " " + timestamp;
-                    String date_pattern = "yyyy-MM-dd HH:mm:ss";
-                    current_item.timestamp = new SimpleDateFormat(date_pattern).parse(datetime);
-                } else if (current_item != null) {
-                    current_item.content += line + "\n";
-                }
-                line = reader.readLine();
-            }
-
-            if (current_item != null) {
-                items.add(current_item);
-            }
-        } catch (FileNotFoundException e) {
-
-        } catch (IOException e) {
-
-        } catch (ParseException e) {
-
-        }
     }
 
     private HashMap<String, Integer> loadVocab() {
@@ -159,72 +114,67 @@ public class LogEntryFragment extends Fragment {
 
     private void updateList() {
         items = new ArrayList<>();
-        ArrayList<DummyItem> items2 = new ArrayList<>();
-        Context context = getContext();
-        File directory = new File(context.getFilesDir(), "files");
-        File[] files = directory.listFiles();
-        for (int i = 0; i < files.length; i++) {
-            String filename = files[i].getName();
-            if (filename.startsWith("log.")) {
-                parseLogFile(files[i], items2);
-            }
-        }
+
+        ArrayList<LogEntry> items2 = LogReader.getLogs();
 
         // Search.
         if (query != null && !query.equals("")) {
-            ArrayList<String> query_tkns = tokenize(query);
-            // HashMap<String, Integer> dict = loadVocab();
-            HashMap<String, Integer> dict = new HashMap<>();
-            for (int i = 0; i < items2.size(); i++) {
-                ArrayList<String> tkns = new ArrayList<>();
-                tkns.addAll(tokenize(items2.get(i).title));
-                tkns.addAll(tokenize(items2.get(i).content));
-                for (String t : tkns) {
-                    if (dict.containsKey(t)) {
-                        dict.put(t, dict.get(t) + 1);
-                    } else {
-                        dict.put(t, 1);
-                    }
-                }
-            }
-
-            for (int i = 0; i < items2.size(); i++) {
-                ArrayList<String> tkns = new ArrayList<>();
-                tkns.addAll(tokenize(items2.get(i).title));
-                tkns.addAll(tokenize(items2.get(i).content));
-
-                double score = 0.0;
-                double norm = 0.0;
-                for (String t : tkns) {
-                    if (dict.containsKey(t)) {
-                        if (query_tkns.contains(t)) {
-                            score += Math.pow(1.0 / (double) dict.get(t), 2);
+            if (LogReader.logEntriesByTag.keySet().contains(query.toLowerCase())) {
+                items = LogReader.logEntriesByTag.get(query.toLowerCase());
+            } else {
+                ArrayList<String> query_tkns = tokenize(query);
+                HashMap<String, Integer> dict = new HashMap<>();
+                for (int i = 0; i < items2.size(); i++) {
+                    ArrayList<String> tkns = new ArrayList<>();
+                    tkns.addAll(tokenize(items2.get(i).title));
+                    tkns.addAll(tokenize(items2.get(i).getContent()));
+                    for (String t : tkns) {
+                        if (dict.containsKey(t)) {
+                            dict.put(t, dict.get(t) + 1);
+                        } else {
+                            dict.put(t, 1);
                         }
-                        norm += Math.pow(1.0 / (double) dict.get(t), 2);
                     }
                 }
-                if (norm > 0) {
-                    score /= Math.sqrt(norm);
-                }
-                items2.get(i).score = score;
-            }
 
-            for (int i = 0; i < items2.size(); i++) {
-                if (items2.get(i).score == 0) continue;
-                else items.add(items2.get(i));
-            }
+                for (int i = 0; i < items2.size(); i++) {
+                    ArrayList<String> tkns = new ArrayList<>();
+                    tkns.addAll(tokenize(items2.get(i).title));
+                    tkns.addAll(tokenize(items2.get(i).getContent()));
 
-            Collections.sort(items, new Comparator<DummyItem>() {
-                public int compare(DummyItem o1, DummyItem o2) {
-                    if (o2.score == o1.score) return 0;
-                    if (o2.score > o1.score) return 1;
-                    return -1;
+                    double score = 0.0;
+                    double norm = 0.0;
+                    for (String t : tkns) {
+                        if (dict.containsKey(t)) {
+                            if (query_tkns.contains(t)) {
+                                score += Math.pow(1.0 / (double) dict.get(t), 2);
+                            }
+                            norm += Math.pow(1.0 / (double) dict.get(t), 2);
+                        }
+                    }
+                    if (norm > 0) {
+                        score /= Math.sqrt(norm);
+                    }
+                    items2.get(i).score = score;
                 }
-            });
+
+                for (int i = 0; i < items2.size(); i++) {
+                    if (items2.get(i).score == 0) continue;
+                    else items.add(items2.get(i));
+                }
+
+                Collections.sort(items, new Comparator<LogEntry>() {
+                    public int compare(LogEntry o1, LogEntry o2) {
+                        if (o2.score == o1.score) return 0;
+                        if (o2.score > o1.score) return 1;
+                        return -1;
+                    }
+                });
+            }
         } else {
             items = items2;
-            Collections.sort(items, new Comparator<DummyItem>() {
-                public int compare(DummyItem o1, DummyItem o2) {
+            Collections.sort(items, new Comparator<LogEntry>() {
+                public int compare(LogEntry o1, LogEntry o2) {
                     return o2.timestamp.compareTo(o1.timestamp);
                 }
             });
@@ -241,6 +191,7 @@ public class LogEntryFragment extends Fragment {
             @Override
             public void onRefresh(String q) {
                 query = q;
+                LogReader.update(getContext());
                 updateList();
                 mAdapter.setItems(items);
                 mAdapter.notifyDataSetChanged();
@@ -264,8 +215,11 @@ public class LogEntryFragment extends Fragment {
                 recyclerView.setLayoutManager(new GridLayoutManager(context, mColumnCount));
             }
 
-            mAdapter = new MyLogEntryRecyclerViewAdapter(items, mListener);
+            mAdapter = new LogEntryRecyclerViewAdapter(items, mListener);
             recyclerView.setAdapter(mAdapter);
+            ItemTouchHelper itemTouchHelper = new
+                    ItemTouchHelper(new SwipeToDeleteCallback(mAdapter));
+            itemTouchHelper.attachToRecyclerView(recyclerView);
         }
 
         return view;
@@ -301,6 +255,6 @@ public class LogEntryFragment extends Fragment {
      */
     public interface OnListFragmentInteractionListener {
         // TODO: Update argument type and name
-        void onListFragmentInteraction(DummyItem item);
+        void onListFragmentInteraction(LogEntry item);
     }
 }

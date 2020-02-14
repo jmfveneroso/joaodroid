@@ -1,172 +1,448 @@
 package com.example.joaodroid;
 
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.content.ContextCompat;
+import androidx.viewpager.widget.PagerAdapter;
+import androidx.viewpager.widget.ViewPager;
 
-import android.content.Intent;
+import android.content.Context;
+import android.graphics.Typeface;
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.util.Log;
-import android.view.MotionEvent;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.ScrollView;
+import android.view.ViewGroup;
+import android.widget.CheckBox;
+import android.widget.CompoundButton;
+import android.widget.LinearLayout;
 import android.widget.TextView;
-
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.text.ParseException;
+import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
-import java.util.Iterator;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import static com.example.joaodroid.LogActivity.EXTRA_ID;
-import static com.example.joaodroid.LogActivity.EXTRA_CONTENT;
-import static com.example.joaodroid.LogActivity.EXTRA_TIMESTAMP;
-import static com.example.joaodroid.LogActivity.EXTRA_TITLE;
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
  * status bar and navigation/system bar) with user interaction.
  */
 public class SingleLogEntryActivity extends AppCompatActivity {
+    private LogReader.LogEntry entry;
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        this.entry.parent.rewrite(getApplicationContext());
+    }
+
+    public class CustomPagerAdapter extends PagerAdapter {
+        LogReader.LogEntry entry;
+        int entry_id;
+        private Context mContext;
+
+        public CustomPagerAdapter(Context context, int entry_id) {
+            mContext = context;
+            this.entry_id = entry_id;
+        }
+
+        private TextView createTextView() {
+            float d = getResources().getDisplayMetrics().density;
+
+            TextView tv = new TextView(mContext);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
+            tv.setLayoutParams(params);
+
+            tv.setPadding((int) d * 16, (int) d * 12, (int) d * 16, (int) d * 12);
+            tv.setBackground(ContextCompat.getDrawable(getApplicationContext(),
+                    R.drawable.textview_border));
+            tv.setTypeface(Typeface.MONOSPACE);
+            return tv;
+        }
+
+        private TextView createAttributeTextView() {
+            float d = getResources().getDisplayMetrics().density;
+
+            TextView tv = new TextView(mContext);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
+            tv.setLayoutParams(params);
+
+            tv.setPadding((int) d * 16, (int) d * 12, (int) d * 16, (int) d * 12);
+            tv.setTypeface(Typeface.MONOSPACE);
+            return tv;
+        }
+
+        private CheckBox createCheckbox() {
+            float d = getResources().getDisplayMetrics().density;
+
+            CheckBox cb = new CheckBox(mContext);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
+            cb.setLayoutParams(params);
+            cb.setTypeface(Typeface.MONOSPACE);
+            return cb;
+        }
+
+        private TextView getChronoView(String key) {
+            TextView tv = createTextView();
+
+            LogReader.Chrono chrono = LogReader.getChrono(key);
+            String text = "";
+            text += "Avg Duration: " + chrono.avgDuration + "\n";
+            text += "Avg Start: " + chrono.avgStartTime + "\n";
+            text += "Avg End: " + chrono.avgEndTime + "\n";
+            tv.setText(text);
+            return tv;
+        }
+
+        private CheckBox createTask(String title, boolean complete, int taskIndex) {
+            CheckBox cb = createCheckbox();
+            cb.setText(title);
+            cb.setChecked(complete);
+
+            LogReader.LogEntry entry = this.entry;
+            cb.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+                @Override
+                public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                    entry.setTaskChecked(taskIndex, isChecked);
+                }
+            });
+
+            return cb;
+        }
+
+        private boolean isSpecialBlock(String line) {
+            return line.startsWith("+") || line.startsWith("[ ]") || line.startsWith("[x]");
+        }
+
+        private void createDynamicFeatures() {
+            if (this.entry == null) return;
+
+            LinearLayout ll = findViewById(R.id.dynamic_features);
+            int taskIndex = 0;
+
+            int i = 0;
+            while (i < this.entry.content.size()) {
+                String line = this.entry.content.get(i);
+                if (line.length() == 0) {
+                    ++i;
+                    continue;
+                }
+
+                if (isSpecialBlock(line)) {
+                    if (line.startsWith("[ ]")) {
+                        String taskTitle = line.substring(4);
+                        ll.addView(createTask(taskTitle, false, taskIndex++));
+                    } else if (line.startsWith("[x]")) {
+                        String taskTitle = line.substring(4);
+                        ll.addView(createTask(taskTitle, true, taskIndex++));
+                    } else if (line.startsWith("+")) {
+                        TextView tv = createTextView();
+                        if (line.startsWith("+chrono ")) {
+                            tv = getChronoView(line.substring(8));
+                        } else if (line.startsWith("progress")) {
+                            tv.setText(line);
+                        }
+                        ll.addView(tv);
+                    } else {
+                        // Do nothing.
+                    }
+                    ++i;
+                    continue;
+                }
+
+                ArrayList<String> block_content = new ArrayList<>();
+                block_content.add(line);
+                ++i;
+
+                boolean foundSpace = false;
+                while (i < this.entry.content.size()) {
+                    line = this.entry.content.get(i);
+                    if (line.length() == 0 && foundSpace) {
+                        break;
+                    } else if (isSpecialBlock(line)) {
+                        break;
+                    } else if (line.length() == 0) {
+                        foundSpace = true;
+                        block_content.add(line);
+                    } else {
+                        foundSpace = false;
+                        block_content.add(line);
+                    }
+                    ++i;
+                }
+
+                // Remove extra blank lines.
+                while (block_content.size() > 0) {
+                    int last = block_content.size() - 1;
+                    if (block_content.get(last).length() > 0) break;
+                    block_content.remove(last);
+                }
+
+                TextView tv = createTextView();
+                tv.setText(String.join("\n", block_content));
+                ll.addView(tv);
+            }
+        }
+
+        public void instantiateViewer() {
+            TextView idTextView = findViewById(R.id.id);
+            TextView timestamp = findViewById(R.id.timestamp);
+            TextView title = findViewById(R.id.title);
+            TextView tags = findViewById(R.id.tags);
+
+            idTextView.setText(String.format("%08d", this.entry_id));
+            this.entry = LogReader.getLogEntryById(this.entry_id);
+
+            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String strDate = dateFormat.format(this.entry.timestamp);
+            timestamp.setText(strDate);
+
+            title.setText(this.entry.title);
+            String tagsText = String.join(" ", this.entry.tags);
+            tags.setText(tagsText);
+
+            createDynamicFeatures();
+        }
+
+        public void instantiateEditor() {
+            TextView idTextView = findViewById(R.id.id2);
+            TextView timestamp = findViewById(R.id.timestamp2);
+            TextView title = findViewById(R.id.title2);
+            TextView tags = findViewById(R.id.tags);
+            TextView content = findViewById(R.id.log_output);
+
+            idTextView.setText(String.format("%08d", this.entry_id));
+            this.entry = LogReader.getLogEntryById(this.entry_id);
+
+            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+            String strDate = dateFormat.format(this.entry.timestamp);
+            timestamp.setText(strDate);
+
+            title.setText(this.entry.title);
+            String tagsText = String.join(" ", this.entry.tags);
+            tags.setText(tagsText);
+
+            content.setText(this.entry.getContent());
+
+            LogReader.LogEntry entry = this.entry;
+            content.addTextChangedListener(new TextWatcher() {
+                private Timer timer=new Timer();
+                private final long DELAY = 500; // milliseconds
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    timer.cancel();
+                    timer = new Timer();
+                    timer.schedule(
+                        new TimerTask() {
+                            @Override
+                            public void run() {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    entry.setContent(content.getText().toString());
+                                }
+                            });
+                            }
+                        },
+                        DELAY
+                    );
+                }
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start,
+                                              int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start,
+                                          int before, int count) {
+                }
+            });
+
+            title.addTextChangedListener(new TextWatcher() {
+                private Timer timer=new Timer();
+                private final long DELAY = 500; // milliseconds
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    timer.cancel();
+                    timer = new Timer();
+                    timer.schedule(
+                        new TimerTask() {
+                            @Override
+                            public void run() {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    entry.title = title.getText().toString();
+                                }
+                            });
+                            }
+                        },
+                        DELAY
+                    );
+                }
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start,
+                                              int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start,
+                                          int before, int count) {
+                }
+            });
+
+            tags.addTextChangedListener(new TextWatcher() {
+                private Timer timer=new Timer();
+                private final long DELAY = 500; // milliseconds
+
+                @Override
+                public void afterTextChanged(Editable s) {
+                    timer.cancel();
+                    timer = new Timer();
+                    timer.schedule(
+                            new TimerTask() {
+                                @Override
+                                public void run() {
+                                    runOnUiThread(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            String tagsStr = tags.getText().toString();
+                                            entry.tags.clear();
+                                            for (String tag : tagsStr.split(" ")) {
+                                                if (tag.length() > 0) {
+                                                    entry.tags.add(tag);
+                                                }
+                                            }
+                                        }
+                                    });
+                                }
+                            },
+                            DELAY
+                    );
+                }
+
+                @Override
+                public void beforeTextChanged(CharSequence s, int start,
+                                              int count, int after) {
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start,
+                                          int before, int count) {
+                }
+            });
+        }
+
+        @Override
+        public Object instantiateItem(ViewGroup collection, int position) {
+            LayoutInflater inflater = LayoutInflater.from(mContext);
+            if (position == 0) {
+                ViewGroup layout = (ViewGroup) inflater.inflate(R.layout.activity_single_log_entry_view, collection, false);
+                collection.addView(layout);
+
+                instantiateViewer();
+                return layout;
+            } else {
+                ViewGroup layout = (ViewGroup) inflater.inflate(R.layout.activity_single_log_entry_edit, collection, false);
+                collection.addView(layout);
+                instantiateEditor();
+                return layout;
+            }
+        }
+
+        @Override
+        public void destroyItem(ViewGroup collection, int position, Object view) {
+            collection.removeView((View) view);
+        }
+
+        @Override
+        public int getCount() {
+            return 2;
+        }
+
+        @Override
+        public int getItemPosition(Object object) {
+            return POSITION_NONE;
+        }
+
+        @Override
+        public boolean isViewFromObject(View view, Object object) {
+            return view == object;
+        }
+
+        @Override
+        public CharSequence getPageTitle(int position) {
+            return "None";
+        }
+
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         setContentView(R.layout.activity_single_log_entry);
 
-        TextView id = findViewById(R.id.id);
-        TextView timestamp = findViewById(R.id.timestamp);
-        TextView title = findViewById(R.id.title);
-        TextView content = findViewById(R.id.log_output);
-
         Bundle extras = getIntent().getExtras();
         if (extras != null){
-            id.setText(extras.getString(EXTRA_ID));
-            timestamp.setText(extras.getString(EXTRA_TIMESTAMP));
-            title.setText(extras.getString(EXTRA_TITLE));
-            content.setText(extras.getString(EXTRA_CONTENT));
-        }
-    }
+            int id = extras.getInt(EXTRA_ID);
+            ViewPager viewPager = findViewById(R.id.view_pager);
+            CustomPagerAdapter adapter = new CustomPagerAdapter(this, id);
+            viewPager.setOnPageChangeListener(new ViewPager.OnPageChangeListener() {
+                private Timer timer=new Timer();
+                private final long DELAY = 500; // milliseconds
 
-    private void deleteLogEntryAux(String entry_id) {
-        String date_pattern = "yyyy-MM-dd HH:mm:ss";
-        SimpleDateFormat dateFormat = new SimpleDateFormat(date_pattern);
+                @Override
+                public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
 
-        try {
-            Bundle extras = getIntent().getExtras();
-            Date d = dateFormat.parse(extras.getString(EXTRA_TIMESTAMP));
-
-            date_pattern = "yyyy-MM-dd";
-            dateFormat = new SimpleDateFormat(date_pattern);
-
-            String strDate = dateFormat.format(d);
-            String filename = "log." + strDate + ".txt";
-
-            File file = new File(getFilesDir(), "files/" + filename);
-            BufferedReader br = new BufferedReader(new FileReader(file));
-
-            Pattern p = Pattern.compile("^(\\d{8}) (\\[\\d{2}:\\d{2}:\\d{2}\\])");
-
-            ArrayList<String> lines = new ArrayList<>();
-
-            boolean erasing = false;
-            String line;
-            while ((line = br.readLine()) != null) {
-                Matcher m = p.matcher(line);
-                if (m.find()) {
-                    String id = m.group(1);
-                    if (id.equals(entry_id)) {
-                        erasing = true;
-                    } else {
-                        erasing = false;
-                    }
                 }
 
-                if (!erasing) {
-                    lines.add(line);
+                @Override
+                public void onPageSelected(int position) {
+                    timer.cancel();
+                    timer = new Timer();
+                    timer.schedule(
+                        new TimerTask() {
+                            @Override
+                            public void run() {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    adapter.notifyDataSetChanged();
+                                }
+                            });
+                            }
+                        },
+                        DELAY
+                    );
                 }
-            }
-            br.close();
 
-            file = new File(getFilesDir(), "files/" + filename);
-            FileOutputStream fos = new FileOutputStream(file);
-            BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(fos));
-            for (String l : lines) {
-                bw.write(l);
-                bw.newLine();
-            }
-            bw.close();
-            Log.i("deleteLogEntry", "Deleted entry with id " + entry_id);
-        } catch (ParseException e) {
-            Log.e("deleteLogEntry", e.getMessage());
-        } catch (IOException e) {
-            Log.e("deleteLogEntry", e.getMessage());
+                @Override
+                public void onPageScrollStateChanged(int state) {
+                }
+            });
+
+            viewPager.setAdapter(adapter);
+            this.entry = LogReader.getLogEntryById(id);
         }
-    }
-
-    public void createLogEntry() {
-        try {
-            LocalDateTime now = LocalDateTime.now();
-            DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            String strDate = dateFormat.format(now);
-            String filename = "log." + strDate + ".txt";
-
-            File f = new File(getFilesDir(), "files/id.txt");
-            byte[] encoded = Files.readAllBytes(Paths.get(f.getAbsolutePath()));
-            int id = Integer.parseInt(new String(encoded, StandardCharsets.UTF_8));
-
-            File file = new File(getFilesDir(), "files/" + filename);
-            FileWriter fr = new FileWriter(file, file.exists());
-            if (!file.exists()) {
-                fr.write(strDate + "\n");
-            }
-
-            DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
-            String content = "\n" + String.format("%08d", id);
-            content += " [" + dtf.format(now) + "] ";
-
-            TextView title = findViewById(R.id.title);
-            content += title.getText() + "\n\n";
-
-            TextView log_output = findViewById(R.id.log_output);
-            content += log_output.getText() + "\n";
-
-            fr.write(content);
-            fr.close();
-
-            file = new File(getFilesDir(), "files/id.txt");
-            fr = new FileWriter(file);
-            fr.write(Integer.toString(id + 1));
-            fr.close();
-        } catch (IOException e) {
-            Log.e("createLogEntry", e.getMessage());
-        }
-    }
-
-    public void deleteLogEntry(View view) {
-        Bundle extras = getIntent().getExtras();
-        deleteLogEntryAux(extras.getString(EXTRA_ID));
-        finish();
-    }
-
-    public void editLogEntry(View view) {
-        Bundle extras = getIntent().getExtras();
-        deleteLogEntryAux(extras.getString(EXTRA_ID));
-        createLogEntry();
-        finish();
     }
 }

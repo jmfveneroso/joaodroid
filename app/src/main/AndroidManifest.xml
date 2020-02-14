@@ -10,10 +10,22 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
         <activity
+            android:name=".TagActivity"
+            android:label="@string/title_activity_tag"
+            android:theme="@style/AppTheme.NoActionBar"></activity>
+        <activity
+            android:name=".FileViewerActivity"
+            android:label="@string/title_activity_file_viewer"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
+            android:name=".FileListActivity"
+            android:label="@string/title_activity_file"
+            android:theme="@style/AppTheme.NoActionBar" />
+        <activity
             android:name=".SingleLogEntryActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"
             android:label="@string/title_activity_single_log_entry"
-            android:theme="@style/FullscreenTheme"></activity>
+            android:theme="@style/FullscreenTheme" />
         <activity
             android:name=".LogActivity"
             android:configChanges="orientation|keyboardHidden|screenSize"

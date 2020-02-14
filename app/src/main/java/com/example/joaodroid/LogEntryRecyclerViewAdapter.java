@@ -8,23 +8,24 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.example.joaodroid.LogEntryFragment.OnListFragmentInteractionListener;
-import com.example.joaodroid.dummy.DummyContent.DummyItem;
+import com.example.joaodroid.LogReader.LogEntry;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.List;
 
 /**
- * {@link RecyclerView.Adapter} that can display a {@link DummyItem} and makes a call to the
+ * {@link RecyclerView.Adapter} that can display a {@link LogEntry} and makes a call to the
  * specified {@link OnListFragmentInteractionListener}.
  * TODO: Replace the implementation with code for your data type.
  */
-public class MyLogEntryRecyclerViewAdapter extends RecyclerView.Adapter<MyLogEntryRecyclerViewAdapter.ViewHolder> {
+public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRecyclerViewAdapter.ViewHolder> {
 
-    private List<DummyItem> mValues;
+    private List<LogEntry> mValues;
     private final OnListFragmentInteractionListener mListener;
+    private ViewGroup mParent;
 
-    public MyLogEntryRecyclerViewAdapter(List<DummyItem> items, OnListFragmentInteractionListener listener) {
+    public LogEntryRecyclerViewAdapter(List<LogEntry> items, OnListFragmentInteractionListener listener) {
         mValues = items;
         mListener = listener;
     }
@@ -33,6 +34,7 @@ public class MyLogEntryRecyclerViewAdapter extends RecyclerView.Adapter<MyLogEnt
     public ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
         View view = LayoutInflater.from(parent.getContext())
                 .inflate(R.layout.fragment_logentry, parent, false);
+        mParent = parent;
         return new ViewHolder(view);
     }
 
@@ -49,7 +51,7 @@ public class MyLogEntryRecyclerViewAdapter extends RecyclerView.Adapter<MyLogEnt
         }
 
         if (mValues.get(position).score > 0) {
-            strDate += " : " + String.format("%.5f", mValues.get(position).score);;
+            strDate += " : " + String.format("%.5f", mValues.get(position).score);
         }
         holder.mIdView.setText(strDate);
         holder.mTitleView.setText(mValues.get(position).title);
@@ -59,8 +61,6 @@ public class MyLogEntryRecyclerViewAdapter extends RecyclerView.Adapter<MyLogEnt
             @Override
             public void onClick(View v) {
                 if (null != mListener) {
-                    // Notify the active callbacks interface (the activity, if the
-                    // fragment is attached to one) that an item has been selected.
                     mListener.onListFragmentInteraction(holder.mItem);
                 }
             }
@@ -77,14 +77,14 @@ public class MyLogEntryRecyclerViewAdapter extends RecyclerView.Adapter<MyLogEnt
         public final TextView mIdView;
         public final TextView mTitleView;
         public final TextView mTagsView;
-        public DummyItem mItem;
+        public LogEntry mItem;
 
         public ViewHolder(View view) {
             super(view);
             mView = view;
-            mIdView = (TextView) view.findViewById(R.id.id_timestamp);
-            mTitleView = (TextView) view.findViewById(R.id.timestamp);
-            mTagsView = (TextView) view.findViewById(R.id.tags);
+            mIdView = view.findViewById(R.id.id_timestamp);
+            mTitleView = view.findViewById(R.id.timestamp);
+            mTagsView = view.findViewById(R.id.tags);
         }
 
         @Override
@@ -93,7 +93,14 @@ public class MyLogEntryRecyclerViewAdapter extends RecyclerView.Adapter<MyLogEnt
         }
     }
 
-    public void setItems(List<DummyItem> items) {
+    public void setItems(List<LogEntry> items) {
         mValues = items;
+    }
+
+    public void deleteItem(int position) {
+        LogEntry logEntry = mValues.get(position);
+        LogReader.deleteLogEntry(mParent.getContext(), logEntry);
+        mValues.remove(position);
+        notifyItemRemoved(position);
     }
 }

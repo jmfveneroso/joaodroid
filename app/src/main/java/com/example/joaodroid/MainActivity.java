@@ -42,6 +42,8 @@ public class MainActivity extends AppCompatActivity {
                     Log.e("AWS S3", "Initialization error.", e);
                 }
             });
+
+            LogReader.update(getApplicationContext());
         }
     }
 
@@ -56,10 +58,20 @@ public class MainActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    public void sendMessage(View view) {
+    public void openFileList(View view) {
+        Intent intent = new Intent(this, FileListActivity.class);
+        startActivity(intent);
+    }
+
+    public void openLogList(View view) {
         String message = "test";
         Intent intent = new Intent(this, LogActivity.class);
         intent.putExtra(EXTRA_MESSAGE, message);
+        startActivity(intent);
+    }
+
+    public void openTagList(View view) {
+        Intent intent = new Intent(this, TagActivity.class);
         startActivity(intent);
     }
 }

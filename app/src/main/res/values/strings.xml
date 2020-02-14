@@ -9,5 +9,8 @@
     <string name="dummy_content">DUMMY\nCONTENT</string>
 
     <string name="title_activity_single_log_entry">SingleLogEntryActivity</string>
+    <string name="title_activity_file">FileActivity</string>
+    <string name="title_activity_file_viewer">FileViewer</string>
+    <string name="title_activity_tag">TagActivity</string>
 
 </resources>

@@ -40,6 +40,14 @@
                     android:text="DIFF" />
 
                 <Button
+                    android:id="@+id/diff_button2"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:onClick="rebase"
+                    android:text="REBASE" />
+
+                <Button
                     android:id="@+id/sync_button"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"

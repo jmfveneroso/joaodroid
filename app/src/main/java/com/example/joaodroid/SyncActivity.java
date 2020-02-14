@@ -23,7 +23,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.Hashtable;
 
@@ -164,6 +163,10 @@ public class SyncActivity extends AppCompatActivity {
         return null;
     }
 
+    private JSONObject getLocalMetadataContent() {
+        return getMetadataContent(getFilesDir() + "/files/metadata.json");
+    }
+
     private void updateFiles(JSONObject local_metadata) {
         try {
             JSONArray local_files = local_metadata.getJSONArray("files");
@@ -251,12 +254,15 @@ public class SyncActivity extends AppCompatActivity {
                 remote_metadata_files.put(filename, timestamp);
             }
 
-            JSONArray local_files = local_metadata.getJSONArray("files");
-            for (int i = 0; i < local_files.length(); i++) {
-                JSONObject file = local_files.getJSONObject(i);
-                String filename = file.getString("name");
-                long timestamp  = file.getLong("modified_at");
-                local_metadata_files.put(filename, timestamp);
+            JSONArray local_files = new JSONArray();
+            if (local_metadata != null) {
+                local_files = local_metadata.getJSONArray("files");
+                for (int i = 0; i < local_files.length(); i++) {
+                    JSONObject file = local_files.getJSONObject(i);
+                    String filename = file.getString("name");
+                    long timestamp = file.getLong("modified_at");
+                    local_metadata_files.put(filename, timestamp);
+                }
             }
 
             // Download new or modified files.
@@ -467,7 +473,7 @@ public class SyncActivity extends AppCompatActivity {
     }
 
     private void getLocalAndRemoteMetadata() {
-        JSONObject local_metadata = getMetadataContent(getFilesDir() + "/files/metadata.json");
+        JSONObject local_metadata = getLocalMetadataContent();
 
         Amplify.Storage.downloadFile(
             "metadata.json",
@@ -501,6 +507,11 @@ public class SyncActivity extends AppCompatActivity {
         }
 
         getLocalAndRemoteMetadata();
+    }
+
+    public void rebase(View view) {
+        this.eraseLocalDirectory();
+        syncFiles();
     }
 
     public void diff(View view) {
