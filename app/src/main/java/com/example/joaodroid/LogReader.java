@@ -3,6 +3,13 @@ package com.example.joaodroid;
 import android.content.Context;
 import android.util.Log;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -20,7 +27,6 @@ import java.text.SimpleDateFormat;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -28,13 +34,9 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import static java.lang.Math.PI;
-import static java.lang.Math.toDegrees;
 
 public class LogReader {
     public static ArrayList<LogFile> logFiles = new ArrayList<>();
@@ -47,9 +49,14 @@ public class LogReader {
 
     public static class Chrono {
         Date start_date = null;
+        ArrayList<Date> rawStartDates = new ArrayList<>();
+        ArrayList<Date> rawEndDates = new ArrayList<>();
         String avgStartTime;
         String avgEndTime;
         String avgDuration;
+        int avgStartTimeSecs;
+        int avgEndTimeSecs;
+        int avgDurationSecs;
 
         ArrayList<Integer> startDates = new ArrayList<>();
         ArrayList<Integer> endDates = new ArrayList<>();
@@ -78,8 +85,8 @@ public class LogReader {
         public String title;
         public ArrayList<String> content = new ArrayList<>();
         public ArrayList<String> tags;
-        public Date timestamp;
         public LocalDateTime datetime;
+        public LocalDateTime modifiedAt;
 
         public double score = 0;
 
@@ -88,13 +95,11 @@ public class LogReader {
             this.parent = parent;
             this.id = id;
             this.datetime = datetime;
+            this.modifiedAt = datetime;
             this.tags = new ArrayList<>();
 
             parseHeader(header);
             parseContent(content);
-
-            // TODO: remove.
-            this.timestamp  = Date.from(this.datetime.atZone(ZoneId.systemDefault()).toInstant());
         }
 
         private void parseHeader(String header) {
@@ -117,6 +122,20 @@ public class LogReader {
         }
 
         private void parseContent(ArrayList<String> content) {
+            // Check modified time.
+            if (content.size() > 0) {
+                String line = content.get(0);
+                if (line.startsWith("+modified-at ")) {
+                    String date = line.substring(13);
+
+                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                    this.modifiedAt = LocalDateTime.parse(date, formatter);
+                    content.remove(0);
+                } else {
+                    this.modifiedAt = this.datetime;
+                }
+            }
+
             // Remove blank lines on top.
             while (content.size() > 0) {
                 if (content.get(0).length() > 0) break;
@@ -129,6 +148,7 @@ public class LogReader {
                 if (content.get(last).length() > 0) break;
                 content.remove(last);
             }
+
             this.content = content;
         }
 
@@ -155,6 +175,12 @@ public class LogReader {
 
         public void setContent(String data) {
             this.content = new ArrayList<>(Arrays.asList(data.split("\n")));
+            this.modifiedAt = LocalDateTime.now();
+        }
+
+        public void setTitle(String title) {
+            this.title = title;
+            this.modifiedAt = LocalDateTime.now();
         }
 
         @Override
@@ -167,7 +193,14 @@ public class LogReader {
                 data += "(" + String.join(",", tags) + ") ";
             }
 
-            data += this.title + "\n\n";
+            data += this.title + "\n";
+
+            if (!this.datetime.equals(this.modifiedAt)) {
+                DateTimeFormatter formatter2 = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                data += "+modified-at " + formatter2.format(this.modifiedAt) + "\n";
+            }
+
+            data += "\n";
 
             for (String line : this.content) {
               data += line + "\n";
@@ -270,7 +303,7 @@ public class LogReader {
         }
     }
 
-    private static long secondsSinceMidnight(Date d) {
+    public static long secondsSinceMidnight(Date d) {
         Date midnight = (Date) d.clone();
         midnight.setHours(0);
         midnight.setMinutes(0);
@@ -303,9 +336,13 @@ public class LogReader {
         return Math.atan2(sinSum / len, cosSum / len) * 180.0 / Math.PI;
     }
 
-    static String degreesToTime(double d) {
+    static int degreesToSecs(double d) {
         if (d < 0.0) d += 360.0;
-        int secs  = (int)(d * 240.0);
+        return (int) (d * 240.0);
+    }
+
+    static String degreesToTime(double d) {
+        int secs = degreesToSecs(d);
         int hours = secs / 3600;
         int mins  = secs % 3600;
         secs = mins % 60;
@@ -335,9 +372,11 @@ public class LogReader {
                 String type = arr[2];
 
                 if (type.equals(">")) {
+                    chrono.rawStartDates.add(datetime);
                     chrono.startDates.add((int) secondsSinceMidnight(datetime));
                     chrono.start_date = datetime;
                 } else if (type.equals("<")) {
+                    chrono.rawEndDates.add(datetime);
                     chrono.endDates.add((int) secondsSinceMidnight(datetime));
                     if (chrono.start_date != null) {
                         long diff_in_ms = Math.abs(datetime.getTime() - chrono.start_date.getTime());
@@ -359,6 +398,10 @@ public class LogReader {
                 c.avgDuration = String.format("%02d:%02d:%02d", s / 3600, (s % 3600) / 60, (s % 60));
                 c.avgStartTime = degreesToTime(meanAngle(c.startDates));
                 c.avgEndTime = degreesToTime(meanAngle(c.endDates));
+
+                c.avgDurationSecs = (int) s;
+                c.avgStartTimeSecs = degreesToSecs(meanAngle(c.startDates));
+                c.avgEndTimeSecs = degreesToSecs(meanAngle(c.endDates));
             }
         } catch (FileNotFoundException e) {
 
@@ -409,8 +452,33 @@ public class LogReader {
         });
     }
 
+    public static void load(Context context) {
+        RequestQueue queue = Volley.newRequestQueue(context);
+        String url = "http://18.224.133.3/all";
+
+        Log.e(">>>>>>>>>>>>>>", "just what");
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+            new Response.Listener<String>() {
+                @Override
+                public void onResponse(String response) {
+                    Log.e(">>>>>>>>>>>>>>", response);
+
+
+
+                }
+            },
+            new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                    Log.e(">>>>>>>>>>>>>>", error.getMessage());
+                }
+            }
+        );
+        queue.add(stringRequest);
+    }
+
     public static void update(Context context) {
-        LogReader.logFiles = new ArrayList<>();
+        /*LogReader.logFiles = new ArrayList<>();
 
         try {
             File directory = new File(context.getFilesDir(), "files");
@@ -450,13 +518,13 @@ public class LogReader {
 
         Collections.sort(LogReader.logEntries, new Comparator<LogEntry>() {
             public int compare(LogEntry o1, LogEntry o2) {
-                return o2.timestamp.compareTo(o1.timestamp);
+                return o2.modifiedAt.compareTo(o1.modifiedAt);
             }
         });
 
         buildIdIndex();
         buildTagIndex();
-        buildChronoIndex(context);
+        buildChronoIndex(context);*/
     }
 
     public static ArrayList<LogEntry> getLogs() {
@@ -536,5 +604,22 @@ public class LogReader {
         } catch (IOException e) {
 
         }
+    }
+
+    public static void reinsertLogEntry(Context context, LogEntry entry) {
+        boolean found = false;
+        LogFile logFile = entry.parent;
+        for (int i = 0; i < logFile.logEntries.size(); ++i) {
+            if (logFile.logEntries.get(i).datetime.isAfter(entry.datetime)) {
+                logFile.logEntries.add(i, entry);
+                found = true;
+                break;
+            }
+        }
+        if (!found){
+            logFile.logEntries.add(entry);
+        }
+
+        logFile.rewrite(context);
     }
 }

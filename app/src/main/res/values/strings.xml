@@ -12,5 +12,6 @@
     <string name="title_activity_file">FileActivity</string>
     <string name="title_activity_file_viewer">FileViewer</string>
     <string name="title_activity_tag">TagActivity</string>
+    <string name="title_activity_chrono">ChronoActivity</string>
 
 </resources>

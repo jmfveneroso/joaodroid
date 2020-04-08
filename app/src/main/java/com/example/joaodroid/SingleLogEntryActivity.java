@@ -6,6 +6,7 @@ import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.text.Editable;
@@ -14,17 +15,22 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Timer;
 import java.util.TimerTask;
 
 import static com.example.joaodroid.LogActivity.EXTRA_ID;
+import static com.example.joaodroid.LogActivity.EXTRA_EDIT;
 
 /**
  * An example full-screen activity that shows and hides the system UI (i.e.
@@ -60,26 +66,11 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
             tv.setLayoutParams(params);
 
-            tv.setPadding((int) d * 16, (int) d * 12, (int) d * 16, (int) d * 12);
-            tv.setBackground(ContextCompat.getDrawable(getApplicationContext(),
-                    R.drawable.textview_border));
+            // tv.setPadding((int) d * 8, (int) d * 6, (int) d * 8, (int) d * 6);
+            // tv.setBackground(ContextCompat.getDrawable(getApplicationContext(),
+            //        R.drawable.textview_border));
             tv.setTypeface(Typeface.MONOSPACE);
-            return tv;
-        }
-
-        private TextView createAttributeTextView() {
-            float d = getResources().getDisplayMetrics().density;
-
-            TextView tv = new TextView(mContext);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-            );
-            params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
-            tv.setLayoutParams(params);
-
-            tv.setPadding((int) d * 16, (int) d * 12, (int) d * 16, (int) d * 12);
-            tv.setTypeface(Typeface.MONOSPACE);
+            tv.setTextSize(12);
             return tv;
         }
 
@@ -94,6 +85,8 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
             cb.setLayoutParams(params);
             cb.setTypeface(Typeface.MONOSPACE);
+            cb.setTextSize(12);
+            cb.setTextColor(Color.DKGRAY);
             return cb;
         }
 
@@ -150,14 +143,6 @@ public class SingleLogEntryActivity extends AppCompatActivity {
                     } else if (line.startsWith("[x]")) {
                         String taskTitle = line.substring(4);
                         ll.addView(createTask(taskTitle, true, taskIndex++));
-                    } else if (line.startsWith("+")) {
-                        TextView tv = createTextView();
-                        if (line.startsWith("+chrono ")) {
-                            tv = getChronoView(line.substring(8));
-                        } else if (line.startsWith("progress")) {
-                            tv.setText(line);
-                        }
-                        ll.addView(tv);
                     } else {
                         // Do nothing.
                     }
@@ -199,18 +184,23 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             }
         }
 
+        public String getTimeString(LocalDateTime date) {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+            return formatter.format(date);
+        }
+
         public void instantiateViewer() {
             TextView idTextView = findViewById(R.id.id);
-            TextView timestamp = findViewById(R.id.timestamp);
+            TextView createdAt = findViewById(R.id.created_at);
+            TextView modifiedAt = findViewById(R.id.modified_at);
             TextView title = findViewById(R.id.title);
             TextView tags = findViewById(R.id.tags);
 
             idTextView.setText(String.format("%08d", this.entry_id));
             this.entry = LogReader.getLogEntryById(this.entry_id);
 
-            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            String strDate = dateFormat.format(this.entry.timestamp);
-            timestamp.setText(strDate);
+            modifiedAt.setText(getTimeString(this.entry.modifiedAt));
+            createdAt.setText(getTimeString(this.entry.datetime));
 
             title.setText(this.entry.title);
             String tagsText = String.join(" ", this.entry.tags);
@@ -221,23 +211,38 @@ public class SingleLogEntryActivity extends AppCompatActivity {
 
         public void instantiateEditor() {
             TextView idTextView = findViewById(R.id.id2);
-            TextView timestamp = findViewById(R.id.timestamp2);
+            TextView createdAt = findViewById(R.id.created_at2);
+            TextView modifiedAt = findViewById(R.id.modified_at2);
             TextView title = findViewById(R.id.title2);
-            TextView tags = findViewById(R.id.tags);
+            TextView tags = findViewById(R.id.tags2);
             TextView content = findViewById(R.id.log_output);
 
             idTextView.setText(String.format("%08d", this.entry_id));
             this.entry = LogReader.getLogEntryById(this.entry_id);
 
-            DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-            String strDate = dateFormat.format(this.entry.timestamp);
-            timestamp.setText(strDate);
+            modifiedAt.setText(getTimeString(this.entry.modifiedAt));
+            createdAt.setText(getTimeString(this.entry.datetime));
 
             title.setText(this.entry.title);
             String tagsText = String.join(" ", this.entry.tags);
             tags.setText(tagsText);
 
             content.setText(this.entry.getContent());
+
+            new Timer().schedule(
+                    new TimerTask() {
+                        @Override
+                        public void run() {
+                            runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    content.requestFocus();
+                                }
+                            });
+                        }
+                    },
+                    100
+            );
 
             LogReader.LogEntry entry = this.entry;
             content.addTextChangedListener(new TextWatcher() {
@@ -290,7 +295,7 @@ public class SingleLogEntryActivity extends AppCompatActivity {
                             runOnUiThread(new Runnable() {
                                 @Override
                                 public void run() {
-                                    entry.title = title.getText().toString();
+                                    entry.setTitle(title.getText().toString());
                                 }
                             });
                             }
@@ -442,6 +447,9 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             });
 
             viewPager.setAdapter(adapter);
+            if (extras.getBoolean(EXTRA_EDIT)) {
+                viewPager.setCurrentItem(1);
+            }
             this.entry = LogReader.getLogEntryById(id);
         }
     }

@@ -57,6 +57,20 @@ public class SyncActivity extends AppCompatActivity {
         log("Deleted local file " + filename);
     }
 
+    private void removeEmptyFiles() {
+        if (dry_run) return;
+
+        File directory = new File(getFilesDir() + "/files");
+        String[] children = directory.list();
+        for (int i = 0; i < children.length; i++) {
+            File f = new File(directory, children[i]);
+            if (f.length() == 0) {
+                f.delete();
+                log("Deleted local file " + children[i]);
+            }
+        }
+    }
+
     private void eraseLocalDirectory() {
         if (dry_run) return;
 
@@ -378,8 +392,8 @@ public class SyncActivity extends AppCompatActivity {
                 long local_timestamp = f.lastModified() / 1000;
                 if (local_timestamp != expected_timestamp) {
                     file.put("timestamp", local_timestamp);
-                    log("File " + filename + " has been modified from " + expected_timestamp +
-                        " to " + local_timestamp);
+                    // log("File " + filename + " has been modified from " + expected_timestamp +
+                    //    " to " + local_timestamp);
                     update_metadata = true;
                 }
             }
@@ -393,7 +407,7 @@ public class SyncActivity extends AppCompatActivity {
                     continue;
 
                 if (!metadata_files.contains(filename)) {
-                    log("File " + filename + " has been created");
+                    // log("File " + filename + " has been created");
                     update_metadata = true;
                 }
 
@@ -505,6 +519,9 @@ public class SyncActivity extends AppCompatActivity {
         } else {
             log("Syncing local and remote");
         }
+
+        // This is necessary because the AWS S3 API has trouble downloading empty files.
+        removeEmptyFiles();
 
         getLocalAndRemoteMetadata();
     }

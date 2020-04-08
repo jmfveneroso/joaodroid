@@ -12,6 +12,12 @@ import com.amazonaws.mobile.client.Callback;
 import com.amazonaws.mobile.client.UserStateDetails;
 import com.amplifyframework.core.Amplify;
 import com.amplifyframework.storage.s3.AWSS3StoragePlugin;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 
 public class MainActivity extends AppCompatActivity {
     public static final String EXTRA_MESSAGE = "com.example.joaodroid.MESSAGE";
@@ -43,8 +49,15 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
 
-            LogReader.update(getApplicationContext());
         }
+        LogReader.load(getApplicationContext());
+        LogReader.update(getApplicationContext());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        LogReader.update(getApplicationContext());
     }
 
     @Override
@@ -72,6 +85,11 @@ public class MainActivity extends AppCompatActivity {
 
     public void openTagList(View view) {
         Intent intent = new Intent(this, TagActivity.class);
+        startActivity(intent);
+    }
+
+    public void openChronoList(View view) {
+        Intent intent = new Intent(this, ChronoActivity.class);
         startActivity(intent);
     }
 }

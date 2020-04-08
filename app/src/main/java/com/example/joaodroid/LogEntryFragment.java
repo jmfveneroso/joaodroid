@@ -1,5 +1,6 @@
 package com.example.joaodroid;
 
+import android.app.Activity;
 import android.content.Context;
 import android.os.Bundle;
 
@@ -17,6 +18,7 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.example.joaodroid.LogReader.LogEntry;
+import com.google.android.material.snackbar.Snackbar;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -41,11 +43,13 @@ import java.util.List;
 public class LogEntryFragment extends Fragment {
 
     public class SwipeToDeleteCallback extends ItemTouchHelper.SimpleCallback {
+        private View mView;
         private LogEntryRecyclerViewAdapter mAdapter;
 
-        public SwipeToDeleteCallback(LogEntryRecyclerViewAdapter adapter) {
+        public SwipeToDeleteCallback(LogEntryRecyclerViewAdapter adapter, View view) {
             super(0, ItemTouchHelper.LEFT | ItemTouchHelper.RIGHT);
             mAdapter = adapter;
+            mView = view;
         }
 
         @Override
@@ -57,6 +61,17 @@ public class LogEntryFragment extends Fragment {
         public void onSwiped(RecyclerView.ViewHolder viewHolder, int direction) {
             int position = viewHolder.getAdapterPosition();
             mAdapter.deleteItem(position);
+            showUndoSnackbar();
+        }
+
+        private void showUndoSnackbar() {
+            Snackbar snackbar = Snackbar.make(mView, "Log entry was deleted", Snackbar.LENGTH_LONG);
+            snackbar.setAction("Undo", v -> undoDelete());
+            snackbar.show();
+        }
+
+        private void undoDelete() {
+            mAdapter.undoDelete();
         }
     }
 
@@ -85,26 +100,6 @@ public class LogEntryFragment extends Fragment {
         args.putInt(ARG_COLUMN_COUNT, columnCount);
         fragment.setArguments(args);
         return fragment;
-    }
-
-    private HashMap<String, Integer> loadVocab() {
-        HashMap<String, Integer> result = new HashMap<>();
-        Context context = getContext();
-        File file = new File(context.getFilesDir(), "files/vocab.txt");
-
-        try {
-            InputStream is = new FileInputStream(file);
-            BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-            String line = reader.readLine();
-            while (line != null) {
-                String[] arr = line.split(" ");
-                result.put(arr[0], Integer.parseInt(arr[1]));
-                line = reader.readLine();
-            }
-        } catch (FileNotFoundException e) {
-        } catch (IOException e) {
-        }
-        return result;
     }
 
     private ArrayList<String> tokenize(String s) {
@@ -175,7 +170,7 @@ public class LogEntryFragment extends Fragment {
             items = items2;
             Collections.sort(items, new Comparator<LogEntry>() {
                 public int compare(LogEntry o1, LogEntry o2) {
-                    return o2.timestamp.compareTo(o1.timestamp);
+                    return o2.modifiedAt.compareTo(o1.modifiedAt);
                 }
             });
         }
@@ -218,7 +213,7 @@ public class LogEntryFragment extends Fragment {
             mAdapter = new LogEntryRecyclerViewAdapter(items, mListener);
             recyclerView.setAdapter(mAdapter);
             ItemTouchHelper itemTouchHelper = new
-                    ItemTouchHelper(new SwipeToDeleteCallback(mAdapter));
+                    ItemTouchHelper(new SwipeToDeleteCallback(mAdapter, view));
             itemTouchHelper.attachToRecyclerView(recyclerView);
         }
 

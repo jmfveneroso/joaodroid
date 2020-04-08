@@ -41,10 +41,7 @@ import static com.example.joaodroid.FileListActivity.EXTRA_FILENAME;
 public class LogActivity extends AppCompatActivity
         implements LogEntryFragment.OnListFragmentInteractionListener {
     public static final String EXTRA_ID = "com.example.joaodroid.ID";
-    public static final String EXTRA_TIMESTAMP = "com.example.joaodroid.TIMESTAMP";
-    public static final String EXTRA_TITLE = "com.example.joaodroid.TITLE";
-    public static final String EXTRA_CONTENT = "com.example.joaodroid.CONTENT";
-    public static final String EXTRA_TAGS = "com.example.joaodroid.TAGS";
+    public static final String EXTRA_EDIT = "com.example.joaodroid.EDIT";
     public static final String EXTRA_QUERY = "com.example.joaodroid.QUERY";
     private FragmentRefreshListener fragmentRefreshListener;
 
@@ -98,20 +95,21 @@ public class LogActivity extends AppCompatActivity
         registerForContextMenu(findViewById(R.id.create_button));
     }
 
-    private void openLogEntry(int id) {
+    private void openLogEntry(int id, Boolean edit) {
         Intent intent = new Intent(this, SingleLogEntryActivity.class);
         intent.putExtra(EXTRA_ID, id);
+        intent.putExtra(EXTRA_EDIT, edit);
         startActivityForResult(intent, 0);
     }
 
     @Override
     public void onListFragmentInteraction(LogReader.LogEntry item) {
-        openLogEntry(Integer.parseInt(item.id));
+        openLogEntry(Integer.parseInt(item.id), false);
     }
 
     public void createLogEntry(View view) {
         int id = LogReader.createLogEntry(getApplicationContext());
-        openLogEntry(id);
+        openLogEntry(id, true);
     }
 
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -126,43 +124,5 @@ public class LogActivity extends AppCompatActivity
 
     public interface FragmentRefreshListener{
         void onRefresh(String q);
-    }
-
-    private void createChronoDialog(boolean go) {
-        AlertDialog.Builder alertDialog = new AlertDialog.Builder(LogActivity.this);
-        alertDialog.setTitle("Chrono " + ((go) ? "Go" : "Back"));
-
-        final EditText input = new EditText(LogActivity.this);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT);
-        input.setLayoutParams(lp);
-
-        alertDialog.setView(input);
-
-        alertDialog.setPositiveButton("YES",
-                new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int which) {
-                        String chrono = input.getText().toString();
-                        LogReader.addChronoEntry(getApplicationContext(), chrono, go);
-                    }
-                });
-
-        alertDialog.setNegativeButton("NO",
-                new DialogInterface.OnClickListener() {
-                    public void onClick(DialogInterface dialog, int which) {
-                        dialog.cancel();
-                    }
-                });
-
-        alertDialog.show();
-    }
-
-    public void chronoGo(View view) {
-        createChronoDialog(true);
-    }
-
-    public void chronoBack(View view) {
-        createChronoDialog(false);
     }
 }

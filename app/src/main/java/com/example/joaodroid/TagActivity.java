@@ -61,7 +61,10 @@ public class TagActivity extends AppCompatActivity {
             TextView tv = createTextView();
 
             DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-            String text = tag.name + "\n" + dateFormat.format(tag.datetime);
+
+            int numEntries = LogReader.logEntriesByTag.get(tag.name).size();
+            String text = tag.name + "\n" + dateFormat.format(tag.datetime) + "\n" + numEntries +
+                    " entries";
             tv.setText(text);
             tv.setOnClickListener(new View.OnClickListener() {
                 @Override

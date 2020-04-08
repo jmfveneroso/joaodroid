@@ -2,6 +2,7 @@ package com.example.joaodroid;
 
 import androidx.recyclerview.widget.RecyclerView;
 
+import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -12,6 +13,8 @@ import com.example.joaodroid.LogReader.LogEntry;
 
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -24,6 +27,8 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
     private List<LogEntry> mValues;
     private final OnListFragmentInteractionListener mListener;
     private ViewGroup mParent;
+    private LogEntry mRecentlyDeletedItem;
+    private int mRecentlyDeletedPosition;
 
     public LogEntryRecyclerViewAdapter(List<LogEntry> items, OnListFragmentInteractionListener listener) {
         mValues = items;
@@ -38,22 +43,27 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
         return new ViewHolder(view);
     }
 
+    public String getTimeString(LocalDateTime date) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        return formatter.format(date);
+    }
+
     @Override
     public void onBindViewHolder(final ViewHolder holder, int position) {
         holder.mItem = mValues.get(position);
 
-        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
-        String strDate = dateFormat.format(holder.mItem.timestamp);
+        holder.mModifiedAtView.setText(getTimeString(holder.mItem.modifiedAt));
+        holder.mCreatedAtView.setText(getTimeString(holder.mItem.datetime));
 
         StringBuilder sb = new StringBuilder();
         for (String t : mValues.get(position).tags) {
             sb.append(t + " ");
         }
 
-        if (mValues.get(position).score > 0) {
+        /*if (mValues.get(position).score > 0) {
             strDate += " : " + String.format("%.5f", mValues.get(position).score);
-        }
-        holder.mIdView.setText(strDate);
+        }*/
+
         holder.mTitleView.setText(mValues.get(position).title);
         holder.mTagsView.setText(sb.toString());
 
@@ -74,7 +84,8 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
 
     public class ViewHolder extends RecyclerView.ViewHolder {
         public final View mView;
-        public final TextView mIdView;
+        public final TextView mCreatedAtView;
+        public final TextView mModifiedAtView;
         public final TextView mTitleView;
         public final TextView mTagsView;
         public LogEntry mItem;
@@ -82,7 +93,8 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
         public ViewHolder(View view) {
             super(view);
             mView = view;
-            mIdView = view.findViewById(R.id.id_timestamp);
+            mCreatedAtView = view.findViewById(R.id.created_at);
+            mModifiedAtView = view.findViewById(R.id.modified_at);
             mTitleView = view.findViewById(R.id.timestamp);
             mTagsView = view.findViewById(R.id.tags);
         }
@@ -99,8 +111,20 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
 
     public void deleteItem(int position) {
         LogEntry logEntry = mValues.get(position);
+        mRecentlyDeletedItem = logEntry;
+        mRecentlyDeletedPosition = position;
+
         LogReader.deleteLogEntry(mParent.getContext(), logEntry);
         mValues.remove(position);
         notifyItemRemoved(position);
+    }
+
+    public void undoDelete() {
+        LogReader.reinsertLogEntry(mParent.getContext(), mRecentlyDeletedItem);
+        mValues.add(mRecentlyDeletedPosition, mRecentlyDeletedItem);
+
+        notifyItemInserted(mRecentlyDeletedPosition);
+        mRecentlyDeletedItem = null;
+        mRecentlyDeletedPosition = -1;
     }
 }
