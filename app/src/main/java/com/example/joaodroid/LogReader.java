@@ -7,8 +7,13 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.Response;
 import com.android.volley.VolleyError;
+import com.android.volley.toolbox.JsonObjectRequest;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -18,14 +23,9 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -34,106 +34,93 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class LogReader {
-    public static ArrayList<LogFile> logFiles = new ArrayList<>();
+    public static Context context;
     public static ArrayList<LogEntry> logEntries = new ArrayList<>();
     public static ArrayList<Tag> tags = new ArrayList<>();
     public static HashMap<Integer, LogEntry> logEntriesById = new HashMap<>();
-    public static HashMap<String, LogFile> logFilesByDate = new HashMap<>();
-    public static HashMap<String, ArrayList<LogEntry> > logEntriesByTag = new HashMap<>();
-    public static HashMap<String, Chrono> chronos = new HashMap<>();
-
-    public static class Chrono {
-        Date start_date = null;
-        ArrayList<Date> rawStartDates = new ArrayList<>();
-        ArrayList<Date> rawEndDates = new ArrayList<>();
-        String avgStartTime;
-        String avgEndTime;
-        String avgDuration;
-        int avgStartTimeSecs;
-        int avgEndTimeSecs;
-        int avgDurationSecs;
-
-        ArrayList<Integer> startDates = new ArrayList<>();
-        ArrayList<Integer> endDates = new ArrayList<>();
-
-        long avg_span = 0;
-        long num_spans = 0;
-
-        public Chrono() {}
-    }
+    public static HashMap<Integer, Tag> tagsById = new HashMap<>();
+    public static HashMap<String, Tag> tagsByName = new HashMap<>();
 
     public static class Tag {
-        String name;
-        LocalDateTime datetime;
-        LogEntry entry;
+        public int id;
+        public String name;
+        public ArrayList<Tag> children = new ArrayList<>();
+        public ArrayList<LogEntry> entries = new ArrayList<>();
+        public LocalDateTime modifiedAt;
+        public Tag parent;
 
-        public Tag(String name, LogEntry e) {
+        public Tag(int id, String name, LocalDateTime modifiedAt) {
+            this.id = id;
             this.name = name;
-            this.datetime = e.datetime;
-            this.entry = e;
+            this.modifiedAt = modifiedAt;
+        }
+
+        public void addChild(Tag child) {
+            children.add(child);
+            child.parent = this;
+        }
+
+        private void getEntriesInternal(Tag t, ArrayList<LogEntry> aux) {
+            aux.addAll(t.entries);
+            for (Tag c : t.children) {
+                getEntriesInternal(c, aux);
+            }
+        }
+        public ArrayList<LogEntry> getEntries() {
+            ArrayList<LogEntry> res = new ArrayList<>();
+            getEntriesInternal(this, res);
+
+            Collections.sort(res, new Comparator<LogEntry>() {
+                @Override
+                public int compare(LogEntry e1, LogEntry e2) {
+                    return e2.modifiedAt.compareTo(e1.modifiedAt);
+                }
+            });
+            return res;
+        }
+
+        public void addEntry(LogEntry entry) {
+            entries.add(entry);
+            entry.category = this;
+        }
+
+        public void removeEntry(LogEntry entry) {
+            entries.remove(entry);
         }
     }
 
+    ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////
+
     public static class LogEntry {
-        public LogFile parent;
-        public String id;
+        public int id;
         public String title;
         public ArrayList<String> content = new ArrayList<>();
         public ArrayList<String> tags;
         public LocalDateTime datetime;
         public LocalDateTime modifiedAt;
+        public Tag category;
 
         public double score = 0;
 
-        public LogEntry(LogFile parent, String id, LocalDateTime datetime, String header,
-                        ArrayList<String> content) {
-            this.parent = parent;
+        public LogEntry(int id, String title, LocalDateTime created_at, LocalDateTime modified_at, String content) {
             this.id = id;
-            this.datetime = datetime;
-            this.modifiedAt = datetime;
-            this.tags = new ArrayList<>();
-
-            parseHeader(header);
+            this.title = title.trim();
+            this.datetime = created_at;
+            this.modifiedAt = modified_at;
             parseContent(content);
         }
 
-        private void parseHeader(String header) {
-            header = header.replaceAll("^[ \t]+|[ \t]+$", "");
-            Pattern pattern = Pattern.compile("^\\([^)]+\\)");
-            Matcher m = pattern.matcher(header);
-            if (m.find()) {
-                String s = header.substring(m.group(0).length());
-                this.title = s.replaceAll("^[ \t]+|[ \t]+$", "");
-
-                // Extract tags.
-                String str = m.group(0).toUpperCase();
-                String[] tags = str.substring(1, str.length() - 1).split(",");
-                for (String tag : tags) {
-                    this.tags.add(tag);
-                }
-            } else {
-                this.title = header;
-            }
-        }
-
-        private void parseContent(ArrayList<String> content) {
-            // Check modified time.
-            if (content.size() > 0) {
-                String line = content.get(0);
-                if (line.startsWith("+modified-at ")) {
-                    String date = line.substring(13);
-
-                    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                    this.modifiedAt = LocalDateTime.parse(date, formatter);
-                    content.remove(0);
-                } else {
-                    this.modifiedAt = this.datetime;
-                }
+        private void parseContent(String s) {
+            String[] lines = s.split("\n");
+            for(String l : lines){
+                content.add(l);
             }
 
             // Remove blank lines on top.
@@ -148,8 +135,6 @@ public class LogReader {
                 if (content.get(last).length() > 0) break;
                 content.remove(last);
             }
-
-            this.content = content;
         }
 
         public void setTaskChecked(int taskIndex, boolean checked) {
@@ -185,121 +170,302 @@ public class LogReader {
 
         @Override
         public String toString() {
-            String data = this.id;
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-            data += " [" + this.datetime.format(formatter) + "] ";
-
-            if (tags.size() > 0) {
-                data += "(" + String.join(",", tags) + ") ";
-            }
-
-            data += this.title + "\n";
-
-            if (!this.datetime.equals(this.modifiedAt)) {
-                DateTimeFormatter formatter2 = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-                data += "+modified-at " + formatter2.format(this.modifiedAt) + "\n";
-            }
-
-            data += "\n";
-
-            for (String line : this.content) {
-              data += line + "\n";
-            }
-
-            return data;
+            return "";
         }
     }
 
-    public static class LogFile {
-        ArrayList<LogEntry> logEntries;
-        LocalDate date;
+    ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////
+    ///////////////////////////////////////////////////////////////
 
-        public LogFile(LocalDate date, ArrayList<String> content) {
-            this.logEntries = new ArrayList<>();
-            this.date = date;
+    public static LocalDateTime  strToDate(String s) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        return LocalDateTime.parse(s, formatter);
+    }
 
-            init(content);
+    public static void update(Context context) {
+        /* buildChronoIndex(context); */
+    }
+
+    public static ArrayList<LogEntry> getLogs() {
+        return LogReader.logEntries;
+    }
+
+    public static ArrayList<Tag> getTags() {
+        return LogReader.tags;
+    }
+
+    public static LogEntry getLogEntryById(int id) {
+        if (!logEntriesById.containsKey(id)) {
+            return null;
         }
+        return logEntriesById.get(id);
+    }
 
-        public void init(ArrayList<String> content) {
-            Pattern pattern = Pattern.compile("^(\\d{8}) (\\[\\d{2}:\\d{2}:\\d{2}\\])");
-            int i = 0;
-            while (i < content.size()) {
-                String line = content.get(i);
-                Matcher m = pattern.matcher(line);
-                if (!m.find()) {
-                    ++i;
-                    continue;
-                }
-
-                String id = m.group(1);
-                String header = line.substring(m.group(0).length());
-
-                String timestamp = m.group(2);
-                timestamp = timestamp.substring(1, timestamp.length()-1);
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-ddHH:mm:ss");
-                LocalDateTime datetime = LocalDateTime.parse(date + timestamp, formatter);
-
-                ArrayList<String> entryContent = new ArrayList<>();
-                ++i;
-                while (i < content.size()) {
-                    line = content.get(i);
-                    m = pattern.matcher(line);
-                    if (m.find()) break;
-                    entryContent.add(line);
-                    ++i;
-                }
-
-                this.logEntries.add(new LogEntry(this, id, datetime, header, entryContent));
-            }
+    public static Tag getTagById(int id) {
+        if (!tagsById.containsKey(id)) {
+            return null;
         }
+        return tagsById.get(id);
+    }
 
-        public void rewrite(Context context) {
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-            String date = this.date.format(formatter);
-
-            try {
-                File f = new File(context.getFilesDir(), "files/log." + date + ".txt");
-
-                String weekday = DayOfWeek.from(this.date).name();
-                weekday = Character.toTitleCase(weekday.charAt(0)) +
-                        weekday.substring(1).toLowerCase();
-
-                String data = date + " (" + weekday  + ")\n\n\n";
-                for (LogEntry e : this.logEntries) {
-                    data += e.toString();
-                }
-
-                FileWriter fw = new FileWriter(f);
-                fw.write(data);
-                fw.close();
-
-            } catch (FileNotFoundException e) {
-
-            } catch (IOException e) {
-
-            }
+    public static Tag getTagByName(String name) {
+        if (!tagsByName.containsKey(name)) {
+            return null;
         }
+        return tagsByName.get(name);
+    }
 
-        public LogEntry addLogEntry(Context context) {
-            LogEntry logEntry = null;
-            try {
-                File f = new File(context.getFilesDir(), "files/id.txt");
-                byte[] encoded = Files.readAllBytes(Paths.get(f.getAbsolutePath()));
-                int id = Integer.parseInt(new String(encoded, StandardCharsets.UTF_8)) + 1;
+    //// API
+    //// API
+    //// API
 
-                // Update id.
-                FileWriter fw = new FileWriter(f);
-                fw.write(Integer.toString(id));
-                fw.close();
-
-                logEntry = new LogEntry(this, String.format("%08d", id),
-                        LocalDateTime.now(), "New Entry", new ArrayList<>());
-            } catch (IOException e) {
-
+    public static void sortEntries() {
+        Collections.sort(logEntries, new Comparator<LogEntry>() {
+            @Override
+            public int compare(LogEntry e1, LogEntry e2) {
+                return e2.modifiedAt.compareTo(e1.modifiedAt);
             }
-            this.logEntries.add(logEntry);
-            return logEntry;
+        });
+    }
+
+    public static void load(Context context) {
+        LogReader.context = context;
+        RequestQueue queue = Volley.newRequestQueue(context);
+        String url = "http://18.224.133.3/all";
+
+        Response.Listener<String> res = new Response.Listener<String>() {
+            @Override
+            public void onResponse(String response) {
+                try {
+                    JSONObject res = new JSONObject(response);
+                    JSONArray tags = res.getJSONArray("tags");
+                    for (int i = 0; i < tags.length(); i++) {
+                        JSONObject tag = tags.getJSONObject(i);
+                        Log.i("log_tag", tag.getString("name"));
+
+                        int id = tag.getInt("id");
+                        String name = tag.getString("name");
+                        LocalDateTime modified_at = strToDate(tag.getString("modified_at"));
+
+                        Tag t = new Tag(id, name, modified_at);
+                        LogReader.tags.add(t);
+                        tagsById.put(t.id, t);
+                        tagsByName.put(t.name, t);
+                    }
+
+                    for (int i = 0; i < tags.length(); i++) {
+                        JSONObject obj = tags.getJSONObject(i);
+                        JSONArray children = obj.getJSONArray("children");
+                        for (int j = 0; j < children.length(); j++) {
+                            Tag tag = getTagById(obj.getInt("id"));
+                            Tag child = getTagById(children.getInt(j));
+                            tag.addChild(child);
+                        }
+                    }
+
+                    JSONArray entries = res.getJSONArray("entries");
+                    for (int i = 0; i < entries.length(); i++){
+                        JSONObject entry = entries.getJSONObject(i);
+
+                        int id = entry.getInt("id");
+                        String title = entry.getString("title");
+                        LocalDateTime created_at = strToDate(entry.getString("created_at"));
+                        LocalDateTime modified_at = strToDate(entry.getString("modified_at"));
+                        String content = entry.getString("content");
+
+                        LogEntry e = new LogEntry(id, title, created_at, modified_at, content);
+                        Tag t = getTagById(entry.getInt("category"));
+                        t.addEntry(e);
+                        LogReader.logEntries.add(e);
+                        logEntriesById.put(e.id, e);
+                    }
+
+                    sortEntries();
+
+                } catch(JSONException e) {
+
+                }
+            }
+        };
+
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+                res,
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                        Log.e(">>>>>>>>>>>>>>", error.getMessage());
+                    }
+                }
+        );
+        queue.add(stringRequest);
+
+        buildChronoIndex(context);
+    }
+
+    public static int getNextEntryId() {
+        Set<Integer> keys = logEntriesById.keySet();
+        return Collections.max(keys) + 1;
+    }
+
+    public static int createLogEntry(LogEntry entry) {
+        LogEntry e;
+        if (entry == null) {
+            int id = getNextEntryId();
+            LocalDateTime now = LocalDateTime.now();
+            e = new LogEntry(id, "New entry", now, now, "");
+            Tag t = getTagById(0);
+            t.addEntry(e);
+            logEntriesById.put(e.id, e);
+            LogReader.logEntries.add(e);
+        } else {
+            e = new LogEntry(entry.id, entry.title, entry.datetime, entry.modifiedAt, entry.getContent());
+        }
+        int id = e.id;
+
+        RequestQueue queue = Volley.newRequestQueue(context);
+        Response.Listener<JSONObject> res = new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                try {
+                    LocalDateTime modified_at = strToDate(response.getString("modified_at"));
+                    e.modifiedAt = modified_at;
+                } catch (JSONException e) {
+
+                }
+            }
+        };
+
+        Map<String, String> params = new HashMap<>();
+        params.put("title", "New entry");
+        params.put("parent_id", "0");
+        JSONObject json = new JSONObject(params);
+
+        String url = "http://18.224.133.3/entries/";
+        JsonObjectRequest putRequest = new JsonObjectRequest(Request.Method.POST, url,
+                json, res,
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                    }
+                }
+        );
+        queue.add(putRequest);
+        return id;
+    }
+
+    public static void updateEntry(LogEntry e) {
+        RequestQueue queue = Volley.newRequestQueue(context);
+        Response.Listener<JSONObject> res = new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {
+                try {
+                    LocalDateTime modified_at = strToDate(response.getString("modified_at"));
+                    e.modifiedAt = modified_at;
+                } catch (JSONException e) {
+
+                }
+            }
+        };
+
+        Map<String, String> params = new HashMap<>();
+        params.put("id", Integer.toString(e.id));
+        params.put("title", e.title);
+        params.put("content", e.getContent());
+        params.put("tag", e.category.name);
+        JSONObject json = new JSONObject(params);
+
+        String url = "http://18.224.133.3/entries/";
+        JsonObjectRequest putRequest = new JsonObjectRequest(Request.Method.PATCH, url,
+            json, res,
+            new Response.ErrorListener() {
+                @Override
+                public void onErrorResponse(VolleyError error) {
+                }
+            }
+        );
+        queue.add(putRequest);
+    }
+
+    public static void deleteLogEntry(LogEntry e) {
+        e.category.removeEntry(e);
+        LogReader.logEntriesById.remove(e.id);
+        LogReader.logEntries.remove(e);
+
+        RequestQueue queue = Volley.newRequestQueue(context);
+        Response.Listener<JSONObject> res = new Response.Listener<JSONObject>() {
+            @Override
+            public void onResponse(JSONObject response) {}
+        };
+
+        Map<String, String> params = new HashMap<>();
+        params.put("id", Integer.toString(e.id));
+        JSONObject json = new JSONObject(params);
+
+        String url = "http://18.224.133.3/entries/" + Integer.toString(e.id) + "/";
+        JsonObjectRequest deleteRequest = new JsonObjectRequest(Request.Method.DELETE, url,
+                json, res,
+                new Response.ErrorListener() {
+                    @Override
+                    public void onErrorResponse(VolleyError error) {
+                    }
+                }
+        );
+        queue.add(deleteRequest);
+    }
+
+
+    public static void reinsertLogEntry(LogEntry e, Tag tag) {
+        Tag t = getTagById(0);
+        t.addEntry(e);
+        logEntriesById.put(e.id, e);
+        LogReader.logEntries.add(e);
+        tag.addEntry(e);
+    }
+
+
+    //// CHRONO
+    //// CHRONO
+    //// CHRONO
+
+    public static HashMap<String, Chrono> chronos = new HashMap<>();
+
+    public static class Chrono {
+        Date start_date = null;
+        ArrayList<Date> rawStartDates = new ArrayList<>();
+        ArrayList<Date> rawEndDates = new ArrayList<>();
+        String avgStartTime;
+        String avgEndTime;
+        String avgDuration;
+        int avgStartTimeSecs;
+        int avgEndTimeSecs;
+        int avgDurationSecs;
+
+        ArrayList<Integer> startDates = new ArrayList<>();
+        ArrayList<Integer> endDates = new ArrayList<>();
+
+        long avg_span = 0;
+        long num_spans = 0;
+
+        public Chrono() {}
+    }
+
+    public static void addChronoEntry(Context context, String chrono, boolean go) {
+        try {
+            File f = new File(context.getFilesDir(), "files/chrono.txt");
+            FileWriter fw = new FileWriter(f, f.exists());
+
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+            String line = LocalDateTime.now().format(formatter) + " ";
+            line += ((go) ? ">" : "<") + " ";
+            line += chrono;
+            fw.append(line + "\n");
+            fw.close();
+        } catch (FileNotFoundException e) {
+
+        } catch (IOException e) {
+
         }
     }
 
@@ -418,187 +584,74 @@ public class LogReader {
         }
         return chronos.get(tag);
     }
+}
 
-    private static void buildIdIndex() {
-        logEntriesById.clear();
-        for (LogEntry e : LogReader.logEntries) {
-            logEntriesById.put(Integer.parseInt(e.id), e);
+
+/*
+public static class LogFile {
+    ArrayList<LogReader.LogEntry> logEntries;
+    LocalDate date;
+
+    public LogFile(LocalDate date, ArrayList<String> content) {
+        this.logEntries = new ArrayList<>();
+        this.date = date;
+
+        init(content);
+    }
+
+    public void init(ArrayList<String> content) {
+        Pattern pattern = Pattern.compile("^(\\d{8}) (\\[\\d{2}:\\d{2}:\\d{2}\\])");
+        int i = 0;
+        while (i < content.size()) {
+            String line = content.get(i);
+            Matcher m = pattern.matcher(line);
+            if (!m.find()) {
+                ++i;
+                continue;
+            }
+
+            String id = m.group(1);
+            String header = line.substring(m.group(0).length());
+
+            String timestamp = m.group(2);
+            timestamp = timestamp.substring(1, timestamp.length()-1);
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-ddHH:mm:ss");
+            LocalDateTime datetime = LocalDateTime.parse(date + timestamp, formatter);
+
+            ArrayList<String> entryContent = new ArrayList<>();
+            ++i;
+            while (i < content.size()) {
+                line = content.get(i);
+                m = pattern.matcher(line);
+                if (m.find()) break;
+                entryContent.add(line);
+                ++i;
+            }
+
+            this.logEntries.add(new LogReader.LogEntry(this, id, datetime, header, entryContent));
         }
     }
 
-    private static void buildTagIndex() {
-        logEntriesByTag.clear();
-        for (LogEntry e : LogReader.logEntries) {
-            for (String tag : e.tags) {
-                tag = tag.toLowerCase();
-                if (!logEntriesByTag.containsKey(tag)) {
-                    logEntriesByTag.put(tag, new ArrayList<>());
-                }
-                logEntriesByTag.get(tag).add(e);
-            }
-        }
-
-        tags.clear();
-        for (String tag : LogReader.logEntriesByTag.keySet()) {
-            tag = tag.toLowerCase();
-            LogEntry e = logEntriesByTag.get(tag).get(0);
-            tags.add(new Tag(tag, e));
-        }
-
-        Collections.sort(LogReader.tags, new Comparator<Tag>() {
-            public int compare(Tag t1, Tag t2) {
-                return t2.datetime.compareTo(t1.datetime);
-            }
-        });
-    }
-
-    public static void load(Context context) {
-        RequestQueue queue = Volley.newRequestQueue(context);
-        String url = "http://18.224.133.3/all";
-
-        Log.e(">>>>>>>>>>>>>>", "just what");
-        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
-            new Response.Listener<String>() {
-                @Override
-                public void onResponse(String response) {
-                    Log.e(">>>>>>>>>>>>>>", response);
-
-
-
-                }
-            },
-            new Response.ErrorListener() {
-                @Override
-                public void onErrorResponse(VolleyError error) {
-                    Log.e(">>>>>>>>>>>>>>", error.getMessage());
-                }
-            }
-        );
-        queue.add(stringRequest);
-    }
-
-    public static void update(Context context) {
-        /*LogReader.logFiles = new ArrayList<>();
+    public void rewrite(Context context) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        String date = this.date.format(formatter);
 
         try {
-            File directory = new File(context.getFilesDir(), "files");
-            File[] files = directory.listFiles();
-            for (int i = 0; i < files.length; i++) {
-                String filename = files[i].getName();
-                if (!filename.startsWith("log.")) continue;
+            File f = new File(context.getFilesDir(), "files/log." + date + ".txt");
 
-                String date = filename.substring(4, 14);
-                InputStream is = new FileInputStream(files[i]);
-                BufferedReader reader = new BufferedReader(new InputStreamReader(is));
+            String weekday = DayOfWeek.from(this.date).name();
+            weekday = Character.toTitleCase(weekday.charAt(0)) +
+                    weekday.substring(1).toLowerCase();
 
-                // Read file into memory.
-                ArrayList<String> lines = new ArrayList<>();
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    lines.add(line);
-                }
-
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-
-                LogFile logFile = new LogFile(LocalDate.parse(date, formatter), lines);
-                LogReader.logFiles.add(logFile);
-                logFilesByDate.put(date, logFile);
+            String data = date + " (" + weekday  + ")\n\n\n";
+            for (LogReader.LogEntry e : this.logEntries) {
+                data += e.toString();
             }
 
-        } catch (FileNotFoundException e) {
-
-        } catch (IOException e) {
-
-        }
-
-        LogReader.logEntries = new ArrayList<>();
-        for (LogFile f : LogReader.logFiles) {
-            LogReader.logEntries.addAll(f.logEntries);
-        }
-
-        Collections.sort(LogReader.logEntries, new Comparator<LogEntry>() {
-            public int compare(LogEntry o1, LogEntry o2) {
-                return o2.modifiedAt.compareTo(o1.modifiedAt);
-            }
-        });
-
-        buildIdIndex();
-        buildTagIndex();
-        buildChronoIndex(context);*/
-    }
-
-    public static ArrayList<LogEntry> getLogs() {
-        return LogReader.logEntries;
-    }
-
-    public static ArrayList<String> getTags() {
-        ArrayList<String> list = new ArrayList<>();
-        list.addAll(LogReader.logEntriesByTag.keySet());
-        return list;
-    }
-
-    public static LogFile getCurrentLogFile(Context context) {
-        LocalDateTime now = LocalDateTime.now();
-        DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        String strDate = dateFormat.format(now);
-        String filename = "log." + strDate + ".txt";
-        File file = new File(context.getFilesDir(), "files/" + filename);
-
-        try {
-            if (!file.exists()) {
-                FileWriter fr = new FileWriter(file, file.exists());
-                DayOfWeek dayOfWeek = DayOfWeek.from(now);
-                fr.write(strDate + " (" + dayOfWeek.name() + ")\n\n\n");
-                LogFile logFile = new LogFile(now.toLocalDate(), new ArrayList<>());
-                logFiles.add(logFile);
-                logFilesByDate.put(strDate, logFile);
-            }
-        } catch (IOException e) {
-
-        }
-
-        return logFilesByDate.get(strDate);
-    }
-
-    public static int createLogEntry(Context context) {
-        LogFile logFile = getCurrentLogFile(context);
-        LogEntry logEntry = logFile.addLogEntry(context);
-        logEntriesById.put(Integer.parseInt(logEntry.id), logEntry);
-        logFile.rewrite(context);
-        return Integer.parseInt(logEntry.id);
-    }
-
-    public static LogEntry getLogEntryById(int id) {
-        if (!logEntriesById.containsKey(id)) {
-            return null;
-        }
-
-        return logEntriesById.get(id);
-    }
-
-    public static void deleteLogEntry(Context context, LogEntry logEntry) {
-        LogFile logFile = logEntry.parent;
-        for (int i = 0; i < logFile.logEntries.size(); i++) {
-            if (logFile.logEntries.get(i).id == logEntry.id) {
-                logFile.logEntries.remove(i);
-                break;
-            }
-        }
-        logFile.rewrite(context);
-    }
-
-    public static void addChronoEntry(Context context, String chrono, boolean go) {
-        try {
-            File f = new File(context.getFilesDir(), "files/chrono.txt");
-            FileWriter fw = new FileWriter(f, f.exists());
-
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-            String line = LocalDateTime.now().format(formatter) + " ";
-            line += ((go) ? ">" : "<") + " ";
-            line += chrono;
-            fw.append(line + "\n");
+            FileWriter fw = new FileWriter(f);
+            fw.write(data);
             fw.close();
+
         } catch (FileNotFoundException e) {
 
         } catch (IOException e) {
@@ -606,20 +659,26 @@ public class LogReader {
         }
     }
 
-    public static void reinsertLogEntry(Context context, LogEntry entry) {
-        boolean found = false;
-        LogFile logFile = entry.parent;
-        for (int i = 0; i < logFile.logEntries.size(); ++i) {
-            if (logFile.logEntries.get(i).datetime.isAfter(entry.datetime)) {
-                logFile.logEntries.add(i, entry);
-                found = true;
-                break;
-            }
-        }
-        if (!found){
-            logFile.logEntries.add(entry);
-        }
+    public LogReader.LogEntry addLogEntry(Context context) {
+        LogReader.LogEntry logEntry = null;
+        try {
+            File f = new File(context.getFilesDir(), "files/id.txt");
+            byte[] encoded = Files.readAllBytes(Paths.get(f.getAbsolutePath()));
+            int id = Integer.parseInt(new String(encoded, StandardCharsets.UTF_8)) + 1;
 
-        logFile.rewrite(context);
+            // Update id.
+            FileWriter fw = new FileWriter(f);
+            fw.write(Integer.toString(id));
+            fw.close();
+
+            logEntry = new LogReader.LogEntry(this, String.format("%08d", id),
+                    LocalDateTime.now(), "New Entry", new ArrayList<>());
+        } catch (IOException e) {
+
+        }
+        this.logEntries.add(logEntry);
+        return logEntry;
     }
 }
+
+*/

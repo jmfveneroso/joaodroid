@@ -2,7 +2,8 @@ package com.example.joaodroid;
 
 import androidx.recyclerview.widget.RecyclerView;
 
-import android.content.Context;
+import android.text.Editable;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -11,11 +12,13 @@ import android.widget.TextView;
 import com.example.joaodroid.LogEntryFragment.OnListFragmentInteractionListener;
 import com.example.joaodroid.LogReader.LogEntry;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
+
+import static com.amazonaws.mobile.auth.core.internal.util.ThreadUtils.runOnUiThread;
 
 /**
  * {@link RecyclerView.Adapter} that can display a {@link LogEntry} and makes a call to the
@@ -28,6 +31,7 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
     private final OnListFragmentInteractionListener mListener;
     private ViewGroup mParent;
     private LogEntry mRecentlyDeletedItem;
+    private LogReader.Tag mRecentlyDeletedItemParent;
     private int mRecentlyDeletedPosition;
 
     public LogEntryRecyclerViewAdapter(List<LogEntry> items, OnListFragmentInteractionListener listener) {
@@ -55,17 +59,8 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
         holder.mModifiedAtView.setText(getTimeString(holder.mItem.modifiedAt));
         holder.mCreatedAtView.setText(getTimeString(holder.mItem.datetime));
 
-        StringBuilder sb = new StringBuilder();
-        for (String t : mValues.get(position).tags) {
-            sb.append(t + " ");
-        }
-
-        /*if (mValues.get(position).score > 0) {
-            strDate += " : " + String.format("%.5f", mValues.get(position).score);
-        }*/
-
         holder.mTitleView.setText(mValues.get(position).title);
-        holder.mTagsView.setText(sb.toString());
+        holder.mTagsView.setText(holder.mItem.category.name);
 
         holder.mView.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -109,22 +104,45 @@ public class LogEntryRecyclerViewAdapter extends RecyclerView.Adapter<LogEntryRe
         mValues = items;
     }
 
+    private Timer timer = new Timer();
+    private final long DELAY = 3000; // milliseconds
+
     public void deleteItem(int position) {
         LogEntry logEntry = mValues.get(position);
         mRecentlyDeletedItem = logEntry;
+        mRecentlyDeletedItemParent = logEntry.category;
         mRecentlyDeletedPosition = position;
 
-        LogReader.deleteLogEntry(mParent.getContext(), logEntry);
+        timer.cancel();
+        timer = new Timer();
+        timer.schedule(
+            new TimerTask() {
+                @Override
+                public void run() {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            LogReader.deleteLogEntry(logEntry);
+                        }
+                    });
+                }
+            },
+            DELAY
+        );
+
         mValues.remove(position);
         notifyItemRemoved(position);
     }
 
     public void undoDelete() {
-        LogReader.reinsertLogEntry(mParent.getContext(), mRecentlyDeletedItem);
-        mValues.add(mRecentlyDeletedPosition, mRecentlyDeletedItem);
+        timer.cancel();
 
+        LogReader.reinsertLogEntry(mRecentlyDeletedItem, mRecentlyDeletedItemParent);
+        mValues.add(mRecentlyDeletedPosition, mRecentlyDeletedItem);
         notifyItemInserted(mRecentlyDeletedPosition);
+
         mRecentlyDeletedItem = null;
         mRecentlyDeletedPosition = -1;
+        mRecentlyDeletedItemParent = null;
     }
 }

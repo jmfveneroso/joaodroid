@@ -1,43 +1,17 @@
 package com.example.joaodroid;
 
-import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.Log;
-import android.view.ContextMenu;
-import android.view.MenuInflater;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Date;
 import java.util.Timer;
 import java.util.TimerTask;
 
-import static com.example.joaodroid.FileListActivity.EXTRA_FILENAME;
-
-/**
- * An example full-screen activity that shows and hides the system UI (i.e.
- * status bar and navigation/system bar) with user interaction.
- */
 public class LogActivity extends AppCompatActivity
         implements LogEntryFragment.OnListFragmentInteractionListener {
     public static final String EXTRA_ID = "com.example.joaodroid.ID";
@@ -104,11 +78,11 @@ public class LogActivity extends AppCompatActivity
 
     @Override
     public void onListFragmentInteraction(LogReader.LogEntry item) {
-        openLogEntry(Integer.parseInt(item.id), false);
+        openLogEntry(item.id, false);
     }
 
     public void createLogEntry(View view) {
-        int id = LogReader.createLogEntry(getApplicationContext());
+        int id = LogReader.createLogEntry(null);
         openLogEntry(id, true);
     }
 

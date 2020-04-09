@@ -11,6 +11,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 import androidx.core.content.ContextCompat;
 
+import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -51,20 +52,15 @@ public class TagActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_tag);
-
+    protected void update() {
         LinearLayout ll = findViewById(R.id.linear_layout2);
+        ll.removeAllViews();
         for (LogReader.Tag tag : LogReader.tags) {
             TextView tv = createTextView();
 
             DateTimeFormatter dateFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-            int numEntries = LogReader.logEntriesByTag.get(tag.name).size();
-            String text = tag.name + "\n" + dateFormat.format(tag.datetime) + "\n" + numEntries +
-                    " entries";
+            String text = tag.name + "\n" + dateFormat.format(tag.modifiedAt);
             tv.setText(text);
             tv.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -76,4 +72,10 @@ public class TagActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_tag);
+        update();
+    }
 }

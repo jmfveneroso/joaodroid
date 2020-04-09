@@ -82,7 +82,7 @@ public class LogEntryFragment extends Fragment {
     private OnListFragmentInteractionListener mListener;
 
     public LogEntryRecyclerViewAdapter mAdapter;
-    private List<LogEntry> items;
+    private List<LogEntry> items = new ArrayList<>();
     private String query;
 
     /**
@@ -114,8 +114,9 @@ public class LogEntryFragment extends Fragment {
 
         // Search.
         if (query != null && !query.equals("")) {
-            if (LogReader.logEntriesByTag.keySet().contains(query.toLowerCase())) {
-                items = LogReader.logEntriesByTag.get(query.toLowerCase());
+            LogReader.Tag tag = LogReader.getTagByName(query.toLowerCase());
+            if (tag != null) {
+                items = tag.getEntries();
             } else {
                 ArrayList<String> query_tkns = tokenize(query);
                 HashMap<String, Integer> dict = new HashMap<>();

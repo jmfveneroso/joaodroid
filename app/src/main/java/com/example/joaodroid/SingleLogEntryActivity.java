@@ -1,7 +1,6 @@
 package com.example.joaodroid;
 
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.viewpager.widget.PagerAdapter;
 import androidx.viewpager.widget.ViewPager;
 
@@ -15,14 +14,10 @@ import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.WindowManager;
-import android.view.inputmethod.InputMethodManager;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -37,12 +32,10 @@ import static com.example.joaodroid.LogActivity.EXTRA_EDIT;
  * status bar and navigation/system bar) with user interaction.
  */
 public class SingleLogEntryActivity extends AppCompatActivity {
-    private LogReader.LogEntry entry;
-
     @Override
     protected void onPause() {
         super.onPause();
-        this.entry.parent.rewrite(getApplicationContext());
+        // this.entry.parent.rewrite(getApplicationContext());
     }
 
     public class CustomPagerAdapter extends PagerAdapter {
@@ -65,10 +58,6 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             );
             params.setMargins((int) d * 24, (int) d * 8, (int) d * 24, (int) d * 8);
             tv.setLayoutParams(params);
-
-            // tv.setPadding((int) d * 8, (int) d * 6, (int) d * 8, (int) d * 6);
-            // tv.setBackground(ContextCompat.getDrawable(getApplicationContext(),
-            //        R.drawable.textview_border));
             tv.setTypeface(Typeface.MONOSPACE);
             tv.setTextSize(12);
             return tv;
@@ -90,18 +79,6 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             return cb;
         }
 
-        private TextView getChronoView(String key) {
-            TextView tv = createTextView();
-
-            LogReader.Chrono chrono = LogReader.getChrono(key);
-            String text = "";
-            text += "Avg Duration: " + chrono.avgDuration + "\n";
-            text += "Avg Start: " + chrono.avgStartTime + "\n";
-            text += "Avg End: " + chrono.avgEndTime + "\n";
-            tv.setText(text);
-            return tv;
-        }
-
         private CheckBox createTask(String title, boolean complete, int taskIndex) {
             CheckBox cb = createCheckbox();
             cb.setText(title);
@@ -112,6 +89,7 @@ public class SingleLogEntryActivity extends AppCompatActivity {
                 @Override
                 public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
                     entry.setTaskChecked(taskIndex, isChecked);
+                    LogReader.updateEntry(entry);
                 }
             });
 
@@ -203,8 +181,7 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             createdAt.setText(getTimeString(this.entry.datetime));
 
             title.setText(this.entry.title);
-            String tagsText = String.join(" ", this.entry.tags);
-            tags.setText(tagsText);
+            tags.setText(this.entry.category.name);
 
             createDynamicFeatures();
         }
@@ -224,30 +201,29 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             createdAt.setText(getTimeString(this.entry.datetime));
 
             title.setText(this.entry.title);
-            String tagsText = String.join(" ", this.entry.tags);
-            tags.setText(tagsText);
+            tags.setText(this.entry.category.name);
 
             content.setText(this.entry.getContent());
 
             new Timer().schedule(
-                    new TimerTask() {
-                        @Override
-                        public void run() {
-                            runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    content.requestFocus();
-                                }
-                            });
-                        }
-                    },
-                    100
+                new TimerTask() {
+                    @Override
+                    public void run() {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                content.requestFocus();
+                            }
+                        });
+                    }
+                },
+                100
             );
 
             LogReader.LogEntry entry = this.entry;
             content.addTextChangedListener(new TextWatcher() {
                 private Timer timer=new Timer();
-                private final long DELAY = 500; // milliseconds
+                private final long DELAY = 1000; // milliseconds
 
                 @Override
                 public void afterTextChanged(Editable s) {
@@ -261,6 +237,7 @@ public class SingleLogEntryActivity extends AppCompatActivity {
                                 @Override
                                 public void run() {
                                     entry.setContent(content.getText().toString());
+                                    LogReader.updateEntry(entry);
                                 }
                             });
                             }
@@ -296,6 +273,7 @@ public class SingleLogEntryActivity extends AppCompatActivity {
                                 @Override
                                 public void run() {
                                     entry.setTitle(title.getText().toString());
+                                    LogReader.updateEntry(entry);
                                 }
                             });
                             }
@@ -330,13 +308,17 @@ public class SingleLogEntryActivity extends AppCompatActivity {
                                     runOnUiThread(new Runnable() {
                                         @Override
                                         public void run() {
-                                            String tagsStr = tags.getText().toString();
-                                            entry.tags.clear();
-                                            for (String tag : tagsStr.split(" ")) {
-                                                if (tag.length() > 0) {
-                                                    entry.tags.add(tag);
-                                                }
+                                            String tagName = tags.getText().toString();
+                                            LogReader.Tag tag = LogReader.getTagByName(tagName);
+                                            if (tag == null) {
+                                                Log.e("no", "way no");
+                                                return;
                                             }
+                                            Log.e("no", "magic");
+
+                                            entry.category.removeEntry(entry);
+                                            tag.addEntry(entry);
+                                            LogReader.updateEntry(entry);
                                         }
                                     });
                                 }
@@ -450,7 +432,6 @@ public class SingleLogEntryActivity extends AppCompatActivity {
             if (extras.getBoolean(EXTRA_EDIT)) {
                 viewPager.setCurrentItem(1);
             }
-            this.entry = LogReader.getLogEntryById(id);
         }
     }
 }
